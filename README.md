@@ -55,9 +55,18 @@ public/sw.js                shared service worker (offline + installable)
 
 ## Adding a new block type
 
-1. Add it to `blockSchema`, `BLOCK_LABELS` and `newBlock()` in `src/lib/app-definition.ts`
-2. Render it in `BlockView` (`src/components/AppRenderer.tsx`)
-3. Add its fields in `BlockFields` (`src/app/dashboard/apps/[id]/editor.tsx`)
+1. Add it to `blockSchema`, `BLOCK_TYPES`, `STARTER` and `newBlock()` in `src/lib/app-definition.ts`
+2. Add its name to `editor.blocks` (and any field labels to `editor.fields`) in **both** languages in `src/i18n/dictionaries.ts`
+3. Render it in `BlockView` (`src/components/AppRenderer.tsx`)
+4. Add its fields in `BlockFields` (`src/app/dashboard/apps/[id]/editor.tsx`)
+
+## Translations (German / English)
+
+- All platform text lives in `src/i18n/dictionaries.ts`. German (`de`) is the default and the source of truth;
+  TypeScript reports an error if the English (`en`) dictionary is missing a key.
+- Server Components / Server Actions: `const t = await getT()` from `@/i18n/server`
+- Client Components: `const { t, locale } = useI18n()` from `@/i18n/client`
+- The chosen language is stored in the `lang` cookie (set by the settings menu, `src/components/SettingsMenu.tsx`).
 
 ## Before going live (checklist)
 
