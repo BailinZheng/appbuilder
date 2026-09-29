@@ -9,6 +9,7 @@ import { db, schema } from "@/db";
 import { auth, requireUser } from "@/lib/auth";
 import { headers } from "next/headers";
 import type { Dictionary } from "@/i18n/dictionaries";
+import { canPublish } from "@/lib/billing/hosting";
 import { getLocale, getT } from "@/i18n/server";
 import {
   appDefinitionSchema,
@@ -86,6 +87,7 @@ export async function setPublished(appId: string, published: boolean) {
   const [app] = await db.select().from(schema.apps).where(own(user.id, appId));
   if (!app) return { error: t.editor.errors.notFound };
   if (published && !legalComplete(app.legal)) return { error: t.editor.errors.legalIncomplete };
+  if (published && !canPublish(app.hostedUntil)) return { hostingRequired: true as const };
   await db.update(schema.apps).set({ published }).where(own(user.id, appId));
   revalidatePath(`/s/${app.slug}`, "layout");
   return { ok: true };

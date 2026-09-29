@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { TestModeBanner } from "@/components/TestModeBanner";
 import { I18nProvider } from "@/i18n/client";
 import { getLocale, getT } from "@/i18n/server";
 import "./globals.css";
@@ -18,7 +19,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang={locale} className={`${geistSans.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
-        <I18nProvider locale={locale}>{children}</I18nProvider>
+        <I18nProvider locale={locale}>
+          <TestModeBanner />
+          {children}
+        </I18nProvider>
       </body>
     </html>
   );

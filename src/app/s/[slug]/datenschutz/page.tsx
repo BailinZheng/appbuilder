@@ -4,7 +4,8 @@ import { getBase, getPublishedApp } from "../data";
 // Have the final wording checked (e.g. eRecht24 / lawyer) before going live.
 export default async function Datenschutz({ params }: PageProps<"/s/[slug]/datenschutz">) {
   const { slug } = await params;
-  const app = (await getPublishedApp(slug))!;
+  const app = await getPublishedApp(slug);
+  if (!app) return null; // layout shows the 404 / offline notice
   const l = app.legal;
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-5 py-10 leading-relaxed">

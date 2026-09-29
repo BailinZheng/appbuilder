@@ -114,7 +114,7 @@ export function legalComplete(l: LegalInfo) {
   return Boolean(l.businessName.trim() && l.owner.trim() && l.address.trim() && l.email.trim());
 }
 
-const RESERVED = new Set(["www", "app", "api", "admin", "dashboard", "mail", "static", "assets", "s"]);
+const RESERVED = new Set(["www", "app", "api", "admin", "dashboard", "dev", "mail", "static", "assets", "s"]);
 
 /** Checks a subdomain address. Returns an error key (translated by the caller) or null if valid. */
 export function slugError(slug: string): "slugInvalid" | "slugReserved" | null {

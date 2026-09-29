@@ -37,6 +37,8 @@ npm run dev              # applies DB migrations, then starts http://localhost:3
 | `npm run db:generate` | Create a SQL migration after editing `src/db/schema.ts` |
 | `npm run db:migrate`  | Apply migrations to `DATABASE_URL`                     |
 | `npm run db:studio`   | Browse the database in the browser                     |
+| `npm test`            | Billing & AI-core tests (separate test database)       |
+| `npm run dev:grant-credits -- <email> <n>` | Grant test credits (dev tools only) |
 
 ## Project layout
 
@@ -68,6 +70,58 @@ public/sw.js                shared service worker (offline + installable)
 - Client Components: `const { t, locale } = useI18n()` from `@/i18n/client`
 - The chosen language is stored in the `lang` cookie (set by the settings menu, `src/components/SettingsMenu.tsx`).
 
+## Credits, hosting & AI (billing core)
+
+Pay-as-you-go credits for AI actions, one-time hosting passes for going online. Everything is real
+production code except two clearly separated stand-ins: the **mock AI provider** and the **simulated checkout**.
+
+```
+src/lib/billing/
+  catalog.ts          prices, credit packs, hosting passes (the ONLY place prices live; bump PRICE_LIST_VERSION)
+  ledger.ts           credit lots, reserve → capture | release, expiry, history, invariant check
+  billed-action.ts    runBilledAction(): reserve → AI call → charge + save result in ONE transaction
+  purchases.ts        createPurchase / fulfillPurchase (idempotent – shared by dev checkout and future Stripe webhook)
+  payment-provider.ts PaymentProvider interface; "dev" = simulated checkout, "stripe" = TODO
+  hosting.ts          hosting status (active / 14-day grace / lapsed = offline, never deleted)
+src/lib/ai/
+  types.ts            AiProvider interface, site brief, edit requests, token usage
+  patches.ts          patch operations the AI returns + safe applyPatches() (validated, XSS-safe)
+  pricing.ts          model token prices → cost; metered credits (cost × markup, clamped)
+  provider.ts         getAiProvider(); "mock" today, "anthropic" = TODO
+  mock-provider.ts    deterministic demo AI (DE/EN industry templates, simulated token usage)
+```
+
+**How charging works:** credits are *reserved* before an AI call (row-locked, can never go negative, parallel
+requests can't double-spend), then *captured* together with saving the result in one database transaction.
+If the AI call fails, returns nothing useful, or saving fails, the reservation is released – the user pays
+if and only if they get the result. Every AI change is snapshotted, so **undo is always free**.
+
+**Invariant** (checked by tests and shown on /dev): `SUM(credit_transactions) = SUM(lot remaining) + SUM(active holds)`.
+
+### Dev/demo tools (`ENABLE_DEV_TOOLS=true` in `.env`)
+
+- **/dev** – grant test credits to any user, balances with ledger check, unit economics (revenue vs. AI cost), recent purchases
+- **Simulated checkout** – buying credits or hosting opens `/dev/checkout/<id>` instead of Stripe; "Simulate payment" runs the real fulfillment code
+- **CLI:** `npm run dev:grant-credits -- demo@example.test 1000 "Investor demo"`
+- A yellow **TEST MODE** banner is shown on every page while enabled. Never enable on a real production server.
+
+### Replacing the stand-ins later
+
+| Stand-in | Replace with | What to implement |
+|---|---|---|
+| `AI_PROVIDER=mock` | `anthropic` | `AiProvider` with `@anthropic-ai/sdk`: structured output for `generateSite`, strict patch tools (`patchOpSchema`) for `editSite`, prompt caching; return real `response.usage` |
+| `PAYMENT_PROVIDER=dev` | `stripe` | `startCheckout` → Stripe Checkout Session; webhook route calls `fulfillPurchase(purchaseId, sessionId)` |
+
+Nothing else changes: ledger, prices, actions, UI and tests stay as they are.
+
+### Tests
+
+```bash
+npm test
+```
+Runs against `TEST_DATABASE_URL` (a separate database, `appbuilder_test`) – never your dev data. Covers
+concurrency, expiry order, refunds on failure, idempotent purchases, hosting states, patch safety and the mock AI.
+
 ## Before going live (checklist)
 
 - [ ] Real Impressum and Datenschutzerklärung for the platform (`src/app/impressum`, `src/app/datenschutz`)
@@ -77,3 +131,5 @@ public/sw.js                shared service worker (offline + installable)
 - [ ] Wildcard DNS `*.yourdomain` → server, wildcard TLS certificate
 - [ ] Automated, encrypted, off-site database backups
 - [ ] Postgres row-level security as a second layer of tenant isolation
+- [ ] `ENABLE_DEV_TOOLS` removed/false, real `AI_PROVIDER` and `PAYMENT_PROVIDER` configured
+- [ ] Scheduled job calling `sweepExpired()` (expired credits, stale holds) and hosting-expiry reminder e-mails

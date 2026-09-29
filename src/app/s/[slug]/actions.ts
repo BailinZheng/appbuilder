@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { db, schema } from "@/db";
+import { isServing } from "@/lib/billing/hosting";
 
 export type ContactState = { ok?: boolean; error?: string };
 
@@ -22,10 +23,10 @@ export async function submitContact(_prev: ContactState, formData: FormData): Pr
   const { slug, name, email, message } = parsed.data;
 
   const [app] = await db
-    .select({ id: schema.apps.id })
+    .select({ id: schema.apps.id, hostedUntil: schema.apps.hostedUntil })
     .from(schema.apps)
     .where(and(eq(schema.apps.slug, slug), eq(schema.apps.published, true)));
-  if (!app) return { error: "This app is not available." };
+  if (!app || !isServing(app.hostedUntil)) return { error: "This app is not available." };
 
   await db.insert(schema.submissions).values({ id: nanoid(), appId: app.id, name, email, message });
   return { ok: true };

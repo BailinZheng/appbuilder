@@ -15,20 +15,31 @@ import {
   type LegalInfo,
 } from "@/lib/app-definition";
 import type { App } from "@/db/schema";
+import { formatDate } from "@/i18n/format";
+import { hostingStatus } from "@/lib/billing/hosting";
 import { deleteApp, saveApp, setPublished } from "../../actions";
+import { AiPanel } from "./ai-panel";
 
-type Tab = "content" | "design" | "legal";
+type Tab = "ai" | "content" | "design" | "legal";
 // Status messages are stored as keys so they re-render in the new language after a switch.
 type StatusKey = "saved" | "savedUnpublished" | "saveFirst" | "published" | "unpublished";
-type Status = { key: StatusKey } | { error: string };
+type Status = { key: StatusKey } | { error: string } | { hostingRequired: true };
 
 const input = "w-full rounded-lg border px-3 py-2 text-sm";
 const LEGAL_KEYS: (keyof LegalInfo)[] = ["businessName", "owner", "address", "email", "phone", "vatId"];
 
-export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUrl: string; submissionCount: number }) {
+type EditorProps = {
+  app: App;
+  publicUrl: string;
+  submissionCount: number;
+  balance: number;
+  canUndo: boolean;
+};
+
+export function Editor({ app, publicUrl, submissionCount, balance, canUndo }: EditorProps) {
   const router = useRouter();
   const { locale, t } = useI18n();
-  const [tab, setTab] = useState<Tab>("content");
+  const [tab, setTab] = useState<Tab>("ai");
   const [name, setName] = useState(app.name);
   const [themeColor, setThemeColor] = useState(app.themeColor);
   const [definition, setDefinition] = useState<AppDefinition>(app.definition);
@@ -66,12 +77,38 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
     start(async () => {
       if (dirty) return setStatus({ key: "saveFirst" });
       const res = await setPublished(app.id, !app.published);
+      if ("hostingRequired" in res) return setStatus({ hostingRequired: true });
       setStatus(res.error ? { error: res.error } : { key: app.published ? "unpublished" : "published" });
       router.refresh();
     });
 
+  /** Called after an AI change or undo – the server already saved it. */
+  const applySite = (site: { name: string; themeColor: string; definition: AppDefinition }) => {
+    setName(site.name);
+    setThemeColor(site.themeColor);
+    setDefinition(site.definition);
+    setDirty(false);
+    setStatus(null);
+  };
+
+  const hosting = hostingStatus(app.hostedUntil);
+  const hostingText =
+    hosting.state === "none"
+      ? t.billing.hosting.none
+      : hosting.state === "active"
+        ? t.billing.hosting.active(formatDate(hosting.until, locale))
+        : hosting.state === "grace"
+          ? t.billing.hosting.grace(formatDate(hosting.offlineAt, locale))
+          : t.billing.hosting.lapsed(formatDate(hosting.until, locale));
+  const hostingHref = `/dashboard/billing?app=${app.id}#hosting-${app.id}`;
+
   const statusText =
-    status && ("key" in status ? t.editor[status.key] : `${t.editor.errorPrefix}: ${status.error}`);
+    status &&
+    ("key" in status
+      ? t.editor[status.key]
+      : "hostingRequired" in status
+        ? t.hostingUi.needed
+        : `${t.editor.errorPrefix}: ${status.error}`);
 
   return (
     <div className="space-y-4">
@@ -91,9 +128,26 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
               {t.editor.messages} ({submissionCount})
             </Link>
           </p>
+          <p className="text-sm">
+            <span className={hosting.state === "active" ? "text-green-700" : "text-amber-700"}>{hostingText}</span>
+            {" · "}
+            <Link href={hostingHref} className="underline">
+              {hosting.state === "none" ? t.hostingUi.buy : t.hostingUi.extend}
+            </Link>
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          {statusText && <span className="text-sm text-zinc-600">{statusText}</span>}
+          {statusText && (
+            <span className="text-sm text-zinc-600">
+              {statusText}
+              {status && "hostingRequired" in status && (
+                <>
+                  {" "}
+                  <Link href={hostingHref} className="underline">{t.hostingUi.buy}</Link>
+                </>
+              )}
+            </span>
+          )}
           <button onClick={save} disabled={pending || !dirty} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
             {t.editor.save}
           </button>
@@ -107,16 +161,21 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
         {/* Left: settings */}
         <div className="space-y-4">
           <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 text-sm">
-            {(["content", "design", "legal"] as Tab[]).map((k) => (
+            {(["ai", "content", "design", "legal"] as Tab[]).map((k) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
                 className={`flex-1 rounded-md py-1.5 ${tab === k ? "bg-white shadow-sm" : "text-zinc-600"}`}
               >
-                {t.editor.tabs[k]}
+                {k === "ai" ? `✨ ${t.ai.tab}` : t.editor.tabs[k]}
                 {k === "legal" && !legalComplete(legal) && " ⚠"}
               </button>
             ))}
+          </div>
+
+          {/* Kept mounted so balance and last result survive tab switches */}
+          <div hidden={tab !== "ai"}>
+            <AiPanel appId={app.id} initialBalance={balance} initialCanUndo={canUndo} dirty={dirty} onApplied={applySite} />
           </div>
 
           {tab === "content" && (

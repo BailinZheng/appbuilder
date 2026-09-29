@@ -3,7 +3,9 @@ import { getBase, getPublishedApp } from "./data";
 
 export default async function TenantHome({ params }: PageProps<"/s/[slug]">) {
   const { slug } = await params;
-  const app = (await getPublishedApp(slug))!; // layout already 404s when missing
+  // Pages render in parallel with the layout, which shows the 404 / offline notice – just render nothing.
+  const app = await getPublishedApp(slug);
+  if (!app) return null;
   return (
     <AppRenderer
       name={app.name}

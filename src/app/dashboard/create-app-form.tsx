@@ -3,14 +3,7 @@
 import { useActionState, useState } from "react";
 import { useI18n } from "@/i18n/client";
 import { createApp, type CreateState } from "./actions";
-
-const toSlug = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+import { toSlug } from "./slug";
 
 export function CreateAppForm() {
   const { t } = useI18n();
