@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useI18n } from "@/i18n/client";
 import { createApp, type CreateState } from "./actions";
 
 const toSlug = (s: string) =>
@@ -12,6 +13,7 @@ const toSlug = (s: string) =>
     .slice(0, 40);
 
 export function CreateAppForm() {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState<CreateState, FormData>(createApp, {});
   const [slug, setSlug] = useState("");
   const [touched, setTouched] = useState(false);
@@ -22,7 +24,7 @@ export function CreateAppForm() {
       <input
         name="name"
         required
-        placeholder="Business name, e.g. Bäckerei Müller"
+        placeholder={t.dashboard.namePlaceholder}
         className={input}
         onChange={(e) => !touched && setSlug(toSlug(e.target.value))}
       />
@@ -36,13 +38,13 @@ export function CreateAppForm() {
             setSlug(e.target.value.toLowerCase());
           }}
           className={input}
-          placeholder="address"
+          placeholder={t.dashboard.addressPlaceholder}
         />
-        <p className="mt-1 text-xs text-zinc-500">{slug || "address"}.localhost:3000</p>
+        <p className="mt-1 text-xs text-zinc-500">{slug || t.dashboard.addressPlaceholder}.localhost:3000</p>
       </div>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state.error && <p className="text-sm text-red-600">{t.dashboard.errors[state.error]}</p>}
       <button disabled={pending} className="w-full rounded-lg bg-zinc-900 py-2 font-medium text-white disabled:opacity-60">
-        {pending ? "…" : "Create app"}
+        {pending ? "…" : t.dashboard.createApp}
       </button>
     </form>
   );

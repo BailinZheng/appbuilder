@@ -8,31 +8,35 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { auth, requireUser } from "@/lib/auth";
 import { headers } from "next/headers";
+import type { Dictionary } from "@/i18n/dictionaries";
+import { getLocale, getT } from "@/i18n/server";
 import {
   appDefinitionSchema,
   defaultDefinition,
   emptyLegal,
   legalComplete,
   legalSchema,
-  slugSchema,
+  slugError,
 } from "@/lib/app-definition";
 
 // Every action re-checks the logged-in user and filters by ownerId (tenant isolation).
 const own = (userId: string, appId: string) =>
   and(eq(schema.apps.id, appId), eq(schema.apps.ownerId, userId));
 
-export type CreateState = { error?: string };
+export type CreateState = { error?: keyof Dictionary["dashboard"]["errors"] };
 
 export async function createApp(_prev: CreateState, formData: FormData): Promise<CreateState> {
   const user = await requireUser();
-  const parsed = z
-    .object({ name: z.string().trim().min(2).max(80), slug: slugSchema })
-    .safeParse({ name: formData.get("name"), slug: String(formData.get("slug") ?? "").toLowerCase() });
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const locale = await getLocale();
 
-  const { name, slug } = parsed.data;
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").toLowerCase();
+  if (name.length < 2 || name.length > 80) return { error: "nameInvalid" };
+  const slugProblem = slugError(slug);
+  if (slugProblem) return { error: slugProblem };
+
   const [taken] = await db.select({ id: schema.apps.id }).from(schema.apps).where(eq(schema.apps.slug, slug));
-  if (taken) return { error: "This address is already taken." };
+  if (taken) return { error: "slugTaken" };
 
   const id = nanoid();
   await db.insert(schema.apps).values({
@@ -40,7 +44,7 @@ export async function createApp(_prev: CreateState, formData: FormData): Promise
     ownerId: user.id,
     slug,
     name,
-    definition: defaultDefinition(name),
+    definition: defaultDefinition(name, locale),
     legal: { ...emptyLegal, owner: user.name, email: user.email },
   });
   redirect(`/dashboard/apps/${id}`);
@@ -55,14 +59,18 @@ const saveSchema = z.object({
 
 export async function saveApp(appId: string, input: z.input<typeof saveSchema>) {
   const user = await requireUser();
+  const t = await getT();
   const parsed = saveSchema.safeParse(input);
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { error: `${t.editor.errors.invalidInput} (${issue.path.join(".")})` };
+  }
   const updated = await db
     .update(schema.apps)
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(own(user.id, appId))
     .returning({ slug: schema.apps.slug, published: schema.apps.published });
-  if (!updated.length) return { error: "Not found" };
+  if (!updated.length) return { error: t.editor.errors.notFound };
   // A published app must always have a complete Impressum.
   if (updated[0].published && !legalComplete(parsed.data.legal)) {
     await db.update(schema.apps).set({ published: false }).where(own(user.id, appId));
@@ -74,10 +82,10 @@ export async function saveApp(appId: string, input: z.input<typeof saveSchema>) 
 
 export async function setPublished(appId: string, published: boolean) {
   const user = await requireUser();
+  const t = await getT();
   const [app] = await db.select().from(schema.apps).where(own(user.id, appId));
-  if (!app) return { error: "Not found" };
-  if (published && !legalComplete(app.legal))
-    return { error: "Please complete and save the Impressum (business name, owner, address, e-mail) first." };
+  if (!app) return { error: t.editor.errors.notFound };
+  if (published && !legalComplete(app.legal)) return { error: t.editor.errors.legalIncomplete };
   await db.update(schema.apps).set({ published }).where(own(user.id, appId));
   revalidatePath(`/s/${app.slug}`, "layout");
   return { ok: true };

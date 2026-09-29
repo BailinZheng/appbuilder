@@ -4,30 +4,37 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { AppRenderer } from "@/components/AppRenderer";
+import { useI18n } from "@/i18n/client";
+import type { Dictionary } from "@/i18n/dictionaries";
 import {
-  BLOCK_LABELS,
+  BLOCK_TYPES,
   legalComplete,
   newBlock,
   type AppDefinition,
   type Block,
-  type BlockType,
   type LegalInfo,
 } from "@/lib/app-definition";
 import type { App } from "@/db/schema";
 import { deleteApp, saveApp, setPublished } from "../../actions";
 
 type Tab = "content" | "design" | "legal";
+// Status messages are stored as keys so they re-render in the new language after a switch.
+type StatusKey = "saved" | "savedUnpublished" | "saveFirst" | "published" | "unpublished";
+type Status = { key: StatusKey } | { error: string };
+
 const input = "w-full rounded-lg border px-3 py-2 text-sm";
+const LEGAL_KEYS: (keyof LegalInfo)[] = ["businessName", "owner", "address", "email", "phone", "vatId"];
 
 export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUrl: string; submissionCount: number }) {
   const router = useRouter();
+  const { locale, t } = useI18n();
   const [tab, setTab] = useState<Tab>("content");
   const [name, setName] = useState(app.name);
   const [themeColor, setThemeColor] = useState(app.themeColor);
   const [definition, setDefinition] = useState<AppDefinition>(app.definition);
   const [legal, setLegal] = useState<LegalInfo>(app.legal);
   const [dirty, setDirty] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const [pending, start] = useTransition();
 
   const touch = () => setDirty(true);
@@ -49,46 +56,49 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
   const save = () =>
     start(async () => {
       const res = await saveApp(app.id, { name, themeColor, definition, legal });
-      if (res.error) return setMessage(`Error: ${res.error}`);
+      if (res.error) return setStatus({ error: res.error });
       setDirty(false);
-      setMessage(res.unpublished ? "Saved – app was unpublished because the Impressum is incomplete." : "Saved ✓");
+      setStatus({ key: res.unpublished ? "savedUnpublished" : "saved" });
       router.refresh();
     });
 
   const togglePublish = () =>
     start(async () => {
-      if (dirty) return setMessage("Please save your changes first.");
+      if (dirty) return setStatus({ key: "saveFirst" });
       const res = await setPublished(app.id, !app.published);
-      setMessage(res.error ?? (app.published ? "Unpublished." : "Published ✓"));
+      setStatus(res.error ? { error: res.error } : { key: app.published ? "unpublished" : "published" });
       router.refresh();
     });
+
+  const statusText =
+    status && ("key" in status ? t.editor[status.key] : `${t.editor.errorPrefix}: ${status.error}`);
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/dashboard" className="text-sm text-zinc-500">← All apps</Link>
+          <Link href="/dashboard" className="text-sm text-zinc-500">← {t.editor.allApps}</Link>
           <h1 className="text-2xl font-bold">{name}</h1>
           <p className="text-sm text-zinc-500">
             {app.published ? (
               <a href={publicUrl} target="_blank" className="underline">{publicUrl}</a>
             ) : (
-              "Draft – not published"
+              t.editor.draft
             )}
             {" · "}
             <Link href={`/dashboard/apps/${app.id}/submissions`} className="underline">
-              Messages ({submissionCount})
+              {t.editor.messages} ({submissionCount})
             </Link>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {message && <span className="text-sm text-zinc-600">{message}</span>}
+          {statusText && <span className="text-sm text-zinc-600">{statusText}</span>}
           <button onClick={save} disabled={pending || !dirty} className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
-            Save
+            {t.editor.save}
           </button>
           <button onClick={togglePublish} disabled={pending} className="rounded-lg border px-4 py-2 text-sm font-medium">
-            {app.published ? "Unpublish" : "Publish"}
+            {app.published ? t.editor.unpublish : t.editor.publish}
           </button>
         </div>
       </div>
@@ -97,13 +107,14 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
         {/* Left: settings */}
         <div className="space-y-4">
           <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 text-sm">
-            {(["content", "design", "legal"] as Tab[]).map((t) => (
+            {(["content", "design", "legal"] as Tab[]).map((k) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 rounded-md py-1.5 capitalize ${tab === t ? "bg-white shadow-sm" : "text-zinc-600"}`}
+                key={k}
+                onClick={() => setTab(k)}
+                className={`flex-1 rounded-md py-1.5 ${tab === k ? "bg-white shadow-sm" : "text-zinc-600"}`}
               >
-                {t === "legal" ? `Impressum${legalComplete(legal) ? "" : " ⚠"}` : t}
+                {t.editor.tabs[k]}
+                {k === "legal" && !legalComplete(legal) && " ⚠"}
               </button>
             ))}
           </div>
@@ -113,22 +124,22 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
               {blocks.map((b, i) => (
                 <div key={b.id} className="rounded-xl border bg-white p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase text-zinc-500">{BLOCK_LABELS[b.type]}</span>
+                    <span className="text-xs font-semibold uppercase text-zinc-500">{t.editor.blocks[b.type]}</span>
                     <div className="flex gap-1 text-sm">
-                      <button onClick={() => move(i, -1)} className="rounded px-2 hover:bg-zinc-100" aria-label="Move up">↑</button>
-                      <button onClick={() => move(i, 1)} className="rounded px-2 hover:bg-zinc-100" aria-label="Move down">↓</button>
-                      <button onClick={() => setBlocks(blocks.filter((_, j) => j !== i))} className="rounded px-2 text-red-600 hover:bg-red-50" aria-label="Delete">✕</button>
+                      <button onClick={() => move(i, -1)} className="rounded px-2 hover:bg-zinc-100" aria-label={t.editor.moveUp}>↑</button>
+                      <button onClick={() => move(i, 1)} className="rounded px-2 hover:bg-zinc-100" aria-label={t.editor.moveDown}>↓</button>
+                      <button onClick={() => setBlocks(blocks.filter((_, j) => j !== i))} className="rounded px-2 text-red-600 hover:bg-red-50" aria-label={t.editor.deleteBlock}>✕</button>
                     </div>
                   </div>
-                  <BlockFields block={b} onChange={(p) => updateBlock(i, p)} />
+                  <BlockFields block={b} f={t.editor.fields} onChange={(p) => updateBlock(i, p)} />
                 </div>
               ))}
               <div className="rounded-xl border border-dashed p-3">
-                <p className="mb-2 text-xs font-semibold uppercase text-zinc-500">Add block</p>
+                <p className="mb-2 text-xs font-semibold uppercase text-zinc-500">{t.editor.addBlock}</p>
                 <div className="flex flex-wrap gap-2">
-                  {(Object.keys(BLOCK_LABELS) as BlockType[]).map((t) => (
-                    <button key={t} onClick={() => setBlocks([...blocks, newBlock(t)])} className="rounded-lg border bg-white px-2.5 py-1 text-sm hover:bg-zinc-50">
-                      + {BLOCK_LABELS[t]}
+                  {BLOCK_TYPES.map((type) => (
+                    <button key={type} onClick={() => setBlocks([...blocks, newBlock(type, locale)])} className="rounded-lg border bg-white px-2.5 py-1 text-sm hover:bg-zinc-50">
+                      + {t.editor.blocks[type]}
                     </button>
                   ))}
                 </div>
@@ -138,38 +149,27 @@ export function Editor({ app, publicUrl, submissionCount }: { app: App; publicUr
 
           {tab === "design" && (
             <div className="space-y-3 rounded-xl border bg-white p-4">
-              <Field label="App name">
+              <Field label={t.editor.appName}>
                 <input value={name} onChange={(e) => { setName(e.target.value); touch(); }} className={input} />
               </Field>
-              <Field label="Brand colour">
+              <Field label={t.editor.brandColour}>
                 <input type="color" value={themeColor} onChange={(e) => { setThemeColor(e.target.value); touch(); }} className="h-10 w-20" />
               </Field>
               <hr />
               <button
-                onClick={() => confirm("Delete this app and all its messages permanently?") && start(() => deleteApp(app.id))}
+                onClick={() => confirm(t.editor.confirmDelete) && start(() => deleteApp(app.id))}
                 className="text-sm text-red-600 underline"
               >
-                Delete app
+                {t.editor.deleteApp}
               </button>
             </div>
           )}
 
           {tab === "legal" && (
             <div className="space-y-3 rounded-xl border bg-white p-4">
-              <p className="text-sm text-zinc-600">
-                Every business website in Germany needs an Impressum (§ 5 DDG). Required fields are marked *.
-              </p>
-              {(
-                [
-                  ["businessName", "Business name *"],
-                  ["owner", "Owner / legal representative *"],
-                  ["address", "Address *"],
-                  ["email", "E-mail *"],
-                  ["phone", "Phone"],
-                  ["vatId", "VAT ID (USt-IdNr.)"],
-                ] as [keyof LegalInfo, string][]
-              ).map(([k, label]) => (
-                <Field key={k} label={label}>
+              <p className="text-sm text-zinc-600">{t.editor.legalIntro}</p>
+              {LEGAL_KEYS.map((k) => (
+                <Field key={k} label={t.editor.legalFields[k]}>
                   {k === "address" ? (
                     <textarea rows={3} value={legal[k]} onChange={(e) => { setLegal({ ...legal, [k]: e.target.value }); touch(); }} className={input} />
                   ) : (
@@ -201,7 +201,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function BlockFields({ block: b, onChange }: { block: Block; onChange: (p: Partial<Block>) => void }) {
+function BlockFields({
+  block: b,
+  f,
+  onChange,
+}: {
+  block: Block;
+  f: Dictionary["editor"]["fields"];
+  onChange: (p: Partial<Block>) => void;
+}) {
   const text = (key: string, label: string, value: string, multiline = false) => (
     <Field label={label}>
       {multiline ? (
@@ -213,16 +221,16 @@ function BlockFields({ block: b, onChange }: { block: Block; onChange: (p: Parti
   );
   switch (b.type) {
     case "hero":
-      return <div className="space-y-2">{text("title", "Title", b.title)}{text("subtitle", "Subtitle", b.subtitle)}</div>;
+      return <div className="space-y-2">{text("title", f.title, b.title)}{text("subtitle", f.subtitle, b.subtitle)}</div>;
     case "text":
-      return <div className="space-y-2">{text("heading", "Heading", b.heading)}{text("body", "Text", b.body, true)}</div>;
+      return <div className="space-y-2">{text("heading", f.heading, b.heading)}{text("body", f.text, b.body, true)}</div>;
     case "image":
-      return <div className="space-y-2">{text("url", "Image URL (https://…)", b.url)}{text("alt", "Description (alt text)", b.alt)}</div>;
+      return <div className="space-y-2">{text("url", f.imageUrl, b.url)}{text("alt", f.alt, b.alt)}</div>;
     case "button":
-      return <div className="space-y-2">{text("label", "Label", b.label)}{text("href", "Link (https://…, tel:…, mailto:…)", b.href)}</div>;
+      return <div className="space-y-2">{text("label", f.label, b.label)}{text("href", f.link, b.href)}</div>;
     case "hours":
-      return <div className="space-y-2">{text("title", "Title", b.title)}{text("lines", "Hours (one per line)", b.lines, true)}</div>;
+      return <div className="space-y-2">{text("title", f.title, b.title)}{text("lines", f.hours, b.lines, true)}</div>;
     case "contact":
-      return <div className="space-y-2">{text("title", "Title", b.title)}{text("submitLabel", "Button text", b.submitLabel)}</div>;
+      return <div className="space-y-2">{text("title", f.title, b.title)}{text("submitLabel", f.submitLabel, b.submitLabel)}</div>;
   }
 }

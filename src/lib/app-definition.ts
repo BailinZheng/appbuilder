@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Locale } from "@/i18n/config";
 
 // The "no-code" core: every customer app is just this JSON document.
 // One shared renderer turns it into a website/PWA at runtime.
@@ -40,41 +41,61 @@ export type BlockType = Block["type"];
 export type AppDefinition = z.infer<typeof appDefinitionSchema>;
 export type LegalInfo = z.infer<typeof legalSchema>;
 
-export const BLOCK_LABELS: Record<BlockType, string> = {
-  hero: "Header",
-  text: "Text",
-  image: "Image",
-  button: "Button / Link",
-  hours: "Opening hours",
-  contact: "Contact form",
-};
+export const BLOCK_TYPES: BlockType[] = ["hero", "text", "image", "button", "hours", "contact"];
 
-export function newBlock(type: BlockType): Block {
+// Starter content for new blocks, in the language the customer uses the platform in.
+const STARTER = {
+  de: {
+    heroTitle: "Willkommen",
+    heroSubtitle: "Ihr Slogan hier",
+    textHeading: "Über uns",
+    textBody: "Erzählen Sie Ihren Kunden, wer Sie sind.",
+    buttonLabel: "Jetzt anrufen",
+    hoursTitle: "Öffnungszeiten",
+    hoursLines: "Mo–Fr: 9:00–18:00\nSa: 10:00–14:00",
+    contactTitle: "Kontakt",
+    contactSubmit: "Senden",
+  },
+  en: {
+    heroTitle: "Welcome",
+    heroSubtitle: "Your tagline here",
+    textHeading: "About us",
+    textBody: "Tell your customers who you are.",
+    buttonLabel: "Call us",
+    hoursTitle: "Opening hours",
+    hoursLines: "Mon–Fri: 9:00–18:00\nSat: 10:00–14:00",
+    contactTitle: "Contact us",
+    contactSubmit: "Send",
+  },
+} satisfies Record<Locale, Record<string, string>>;
+
+export function newBlock(type: BlockType, locale: Locale = "de"): Block {
   const bid = Math.random().toString(36).slice(2, 10);
+  const s = STARTER[locale];
   switch (type) {
     case "hero":
-      return { id: bid, type, title: "Welcome", subtitle: "Your tagline here" };
+      return { id: bid, type, title: s.heroTitle, subtitle: s.heroSubtitle };
     case "text":
-      return { id: bid, type, heading: "About us", body: "Tell your customers who you are." };
+      return { id: bid, type, heading: s.textHeading, body: s.textBody };
     case "image":
       return { id: bid, type, url: "", alt: "" };
     case "button":
-      return { id: bid, type, label: "Call us", href: "tel:+49000000000" };
+      return { id: bid, type, label: s.buttonLabel, href: "tel:+49000000000" };
     case "hours":
-      return { id: bid, type, title: "Opening hours", lines: "Mon–Fri: 9:00–18:00\nSat: 10:00–14:00" };
+      return { id: bid, type, title: s.hoursTitle, lines: s.hoursLines };
     case "contact":
-      return { id: bid, type, title: "Contact us", submitLabel: "Send" };
+      return { id: bid, type, title: s.contactTitle, submitLabel: s.contactSubmit };
   }
 }
 
-export function defaultDefinition(name: string): AppDefinition {
+export function defaultDefinition(name: string, locale: Locale = "de"): AppDefinition {
   return {
     version: 1,
     blocks: [
-      { ...newBlock("hero"), title: name } as Block,
-      newBlock("text"),
-      newBlock("hours"),
-      newBlock("contact"),
+      { ...newBlock("hero", locale), title: name } as Block,
+      newBlock("text", locale),
+      newBlock("hours", locale),
+      newBlock("contact", locale),
     ],
   };
 }
@@ -94,7 +115,10 @@ export function legalComplete(l: LegalInfo) {
 }
 
 const RESERVED = new Set(["www", "app", "api", "admin", "dashboard", "mail", "static", "assets", "s"]);
-export const slugSchema = z
-  .string()
-  .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, "3–40 chars: a–z, 0–9 and dashes")
-  .refine((s) => !RESERVED.has(s), "This name is reserved");
+
+/** Checks a subdomain address. Returns an error key (translated by the caller) or null if valid. */
+export function slugError(slug: string): "slugInvalid" | "slugReserved" | null {
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/.test(slug)) return "slugInvalid";
+  if (RESERVED.has(slug)) return "slugReserved";
+  return null;
+}
