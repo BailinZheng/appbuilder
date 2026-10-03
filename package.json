@@ -1,43 +1,67 @@
 {
-    "name": "appbuilder",
-    "version": "0.1.0",
-    "private": true,
-    "scripts": {
-        "predev": "npm run db:migrate",
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
-        "lint": "eslint",
-        "typecheck": "tsc --noEmit",
-        "db:generate": "drizzle-kit generate",
-        "db:migrate": "tsx scripts/migrate.ts",
-        "db:studio": "drizzle-kit studio",
-        "test": "tsx --conditions=react-server --test --test-concurrency=1 tests/*.test.mts",
-        "dev:grant-credits": "tsx --conditions=react-server scripts/grant-credits.mts"
-    },
-    "dependencies": {
-        "better-auth": "^1.7.6",
-        "drizzle-orm": "^0.45.3",
-        "nanoid": "^6.0.1",
-        "next": "16.3.7",
-        "postgres": "^3.4.9",
-        "react": "19.2.8",
-        "react-dom": "19.2.8",
-        "server-only": "^0.0.1",
-        "sharp": "^0.35.5",
-        "zod": "^4.6.5"
-    },
-    "devDependencies": {
-        "@tailwindcss/postcss": "^4",
-        "@types/node": "^20",
-        "@types/react": "^19",
-        "@types/react-dom": "^19",
-        "dotenv": "^18.0.4",
-        "drizzle-kit": "^0.31.11",
-        "eslint": "^9",
-        "eslint-config-next": "16.3.7",
-        "tailwindcss": "^4",
-        "tsx": "^4.23.15",
-        "typescript": "^5"
-    }
+  "name": "appbuilder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source, AI-assisted no-code builder for small-business websites and installable web apps (PWAs).",
+  "license": "AGPL-3.0-or-later",
+  "author": "Bailin Zheng (https://github.com/BailinZheng)",
+  "homepage": "https://github.com/BailinZheng/appbuilder#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BailinZheng/appbuilder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BailinZheng/appbuilder/issues"
+  },
+  "keywords": [
+    "no-code",
+    "website-builder",
+    "pwa",
+    "nextjs",
+    "multi-tenant",
+    "saas",
+    "ai",
+    "gdpr"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "predev": "npm run db:migrate",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "test": "tsx --conditions=react-server --test --test-concurrency=1 tests/*.test.mts",
+    "dev:grant-credits": "tsx --conditions=react-server scripts/grant-credits.mts"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.6",
+    "drizzle-orm": "^0.45.3",
+    "nanoid": "^6.0.1",
+    "next": "16.3.7",
+    "postgres": "^3.4.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^18.0.4",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.7",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
 }

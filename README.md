@@ -1,162 +1,217 @@
+<div align="center">
+
 # AppBuilder
 
-No-code app builder for self-employed people and small businesses. Each customer app is stored as a
-JSON definition and rendered by one shared engine. It is served on its own subdomain and is installable as a PWA.
+**An open-source, AI-assisted no-code builder for small-business websites and installable web apps (PWAs).**
 
-## Stack
+Self-employed people and small businesses describe their business, get a complete website generated in seconds,
+refine it by chatting with an AI, and publish it on their own subdomain – GDPR-friendly and hosted in the EU.
 
-| Layer     | Tech                                              |
-|-----------|---------------------------------------------------|
-| Framework | Next.js 16 (App Router) · React 19 · TypeScript   |
-| Styling   | Tailwind CSS 4                                    |
-| Database  | PostgreSQL 18 · Drizzle ORM (migrations in `drizzle/`) |
-| Auth      | Better Auth (email + password, self-hosted, telemetry off) |
-| Validation| Zod                                               |
+[![CI](https://github.com/BailinZheng/appbuilder/actions/workflows/ci.yml/badge.svg)](https://github.com/BailinZheng/appbuilder/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)
 
-## Run locally
+[Features](#features) · [Screenshots](#screenshots) · [Quick start](#quick-start) · [Architecture](#architecture) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
-Requirements (already installed on this machine): Node.js 24 LTS, Git, PostgreSQL 18 (Windows service `postgresql-x64-18`).
+</div>
+
+---
+
+> **Status: early development (pre-alpha).** The full product flow works end to end locally. The AI model and the
+> payment provider are still replaced by clearly separated stand-ins (a deterministic mock AI and a simulated checkout)
+> behind production-ready interfaces – see [Roadmap](#roadmap).
+
+## Features
+
+**For business owners**
+
+- ✨ **Create with AI** – a short guided form (business, industry, services, tone, optional reference websites) produces a complete site
+- 💬 **Edit with AI** – one-click redesigns, new sections, text rewrites or free-form instructions; every AI change can be **undone for free**
+- 🧩 **Block editor** – header, text, images, buttons, opening hours and contact forms with a live phone preview
+- 🖼️ **Drag & drop images** – automatically resized, converted to WebP and stripped of metadata such as GPS location
+- 📱 **Installable PWA** for every site – own subdomain, generated icon, web manifest and offline support
+- ⚖️ **German legal basics built in** – required Impressum before publishing, privacy-policy template, consent on contact forms
+- 🌍 **German & English UI**, switchable at any time (German is the default)
+
+**Under the hood**
+
+- 🏢 **Multi-tenant by design** – one codebase serves the platform and all customer sites (`<slug>.your-domain`)
+- 💳 **Pay-as-you-go credit ledger** – reserve → capture/release in a single transaction, row-locked against double spending, expiring credit lots, append-only history and a verified ledger invariant
+- 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted
+- 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations today, real ones without redesign
+- 🛡️ **Security-minded** – tenant isolation on every query, XSS-safe link validation, content-based upload type detection, SSRF-safe reference URLs, security headers
+- ✅ **Tested** – 29 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, upload safety …) and CI on every push
+
+## Screenshots
+
+| Dashboard & “Create with AI” | Editor with AI panel and live preview |
+|---|---|
+| ![Dashboard with the Create with AI form](docs/screenshots/dashboard.jpg) | ![Editor with AI actions and phone preview](docs/screenshots/editor-ai.jpg) |
+| **Credits & hosting** | **Published site on a phone** |
+| ![Credit packs, hosting passes and price list](docs/screenshots/billing.jpg) | <img src="docs/screenshots/mobile-site.jpg" alt="Generated website on a phone" width="260"> |
+
+<sub>Screenshots show the local development build with demo data; the yellow banner marks test mode.</sub>
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | [Next.js 16](https://nextjs.org) (App Router, Server Actions, `proxy.ts`) · React 19 · TypeScript (strict) |
+| Styling | Tailwind CSS 4 |
+| Database | PostgreSQL · [Drizzle ORM](https://orm.drizzle.team) with versioned SQL migrations |
+| Auth | [Better Auth](https://www.better-auth.com) – self-hosted e-mail/password, telemetry disabled |
+| Validation | Zod 4 |
+| Images | sharp (resize, rotate, WebP, metadata stripping) |
+| Testing | Node.js test runner + tsx against a dedicated test database |
+| CI | GitHub Actions (lint, typecheck, tests with PostgreSQL, production build) |
+
+## Quick start
+
+**Prerequisites:** Node.js 24 LTS and PostgreSQL 16+ (local install or Docker).
 
 ```bash
+git clone https://github.com/BailinZheng/appbuilder.git
+cd appbuilder
 npm install
-cp .env.example .env     # then fill in DATABASE_URL and BETTER_AUTH_SECRET
-npm run dev              # applies DB migrations, then starts http://localhost:3000
+cp .env.example .env
 ```
 
-- Platform / dashboard: http://localhost:3000
-- A published customer app: `http://<slug>.localhost:3000` (also reachable at `/s/<slug>`)
+Create the databases (adjust user and password), then put the same values into `.env`:
 
-## Scripts
+```bash
+createdb appbuilder
+createdb appbuilder_test
+```
 
-| Command               | What it does                                           |
-|-----------------------|--------------------------------------------------------|
-| `npm run dev`         | Migrate DB + start dev server                          |
-| `npm run build`       | Production build (standalone output for Docker)        |
-| `npm run typecheck`   | TypeScript check                                       |
-| `npm run lint`        | ESLint                                                 |
-| `npm run db:generate` | Create a SQL migration after editing `src/db/schema.ts` |
-| `npm run db:migrate`  | Apply migrations to `DATABASE_URL`                     |
-| `npm run db:studio`   | Browse the database in the browser                     |
-| `npm test`            | Billing & AI-core tests (separate test database)       |
-| `npm run dev:grant-credits -- <email> <n>` | Grant test credits (dev tools only) |
+Generate an auth secret and paste it into `BETTER_AUTH_SECRET`:
 
-## Project layout
+```bash
+openssl rand -base64 32
+```
+
+Start the app – migrations run automatically:
+
+```bash
+npm run dev
+```
+
+| URL | What |
+|---|---|
+| http://localhost:3000 | Platform: sign up, dashboard, editor |
+| `http://<slug>.localhost:3000` | A published customer site (also at `/s/<slug>`) |
+| http://localhost:3000/dev | Developer tools: grant test credits, unit economics (when `ENABLE_DEV_TOOLS=true`) |
+
+To try the full flow: sign up, grant yourself test credits on `/dev`, then use **Create with AI** on the dashboard.
+
+<details>
+<summary><b>Configuration (.env)</b></summary>
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | yes | PostgreSQL connection string |
+| `BETTER_AUTH_SECRET` | yes | Random 32-byte secret for signing sessions |
+| `BETTER_AUTH_URL` | yes | Public URL of the platform, e.g. `http://localhost:3000` |
+| `ROOT_DOMAIN` | yes | Domain whose subdomains are customer sites (`localhost` in development) |
+| `TEST_DATABASE_URL` | for tests | Separate database used by `npm test` |
+| `ENABLE_DEV_TOOLS` | no | `true` enables `/dev`, test credits and the simulated checkout. **Never in production.** |
+| `AI_PROVIDER` | no | `mock` (default). `anthropic` is planned. |
+| `PAYMENT_PROVIDER` | no | `dev` (simulated checkout, default). `stripe` is planned. |
+| `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default). S3-compatible storage is planned. |
+| `MOCK_AI_LATENCY_MS` | no | Simulated AI response time for the mock provider |
+
+</details>
+
+### Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Apply migrations and start the dev server |
+| `npm run build` / `npm start` | Production build (standalone output, Docker-ready) / run it |
+| `npm test` | Run the test suite against `TEST_DATABASE_URL` |
+| `npm run lint` · `npm run typecheck` | ESLint · TypeScript |
+| `npm run db:generate` · `npm run db:migrate` | Create a migration from `src/db/schema.ts` · apply migrations |
+| `npm run db:studio` | Browse the database |
+| `npm run dev:grant-credits -- <email> <amount>` | Grant test credits (dev tools only) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Browser["Browser<br/>platform & customer sites"] --> Proxy["proxy.ts<br/>subdomain → tenant"]
+    Proxy --> App["Next.js App Router<br/>pages · server actions · route handlers"]
+    App --> Billing["Billing core<br/>credit ledger · purchases · hosting"]
+    App --> AI["AI layer<br/>AiProvider · patch ops"]
+    App --> Media["Media<br/>validation · sharp · storage"]
+    Billing --> DB[(PostgreSQL)]
+    App --> DB
+    AI -. "mock today<br/>Claude planned" .-> Model["AI model"]
+    Billing -. "simulated today<br/>Stripe planned" .-> Pay["Payments"]
+    Media --> Files[("File storage<br/>local · S3 planned")]
+```
+
+Key design decisions:
+
+- **Sites are data, not generated code.** Every customer site is a small, validated JSON document of blocks rendered
+  by one shared engine. AI output stays small and cheap, every change is reviewable, and there is no untrusted code to host.
+- **AI edits are patches.** The model returns operations (`add_block`, `update_block`, `set_theme` …) that are
+  validated before they are applied – the same schema will become strict tool definitions for the real model.
+- **Charge if and only if the user gets the result.** Credits are reserved first; the charge and the saved result
+  are committed in one database transaction, and failures release the reservation automatically.
+
+More detail – data model, billing invariants, upload pipeline, i18n and how to replace each stand-in – is in
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
+### Project structure
 
 ```
 src/
-  proxy.ts                  subdomain → /s/<slug> routing (multi-tenant)
-  db/schema.ts              all tables (auth, apps, submissions)
-  lib/app-definition.ts     the JSON format of a customer app (blocks) + validation
-  lib/auth.ts               Better Auth config, requireUser()
-  components/AppRenderer    renders an app definition (public site + editor preview)
-  app/dashboard/            customer dashboard, editor, messages, server actions
-  app/s/[slug]/             public customer app: page, Impressum, Datenschutz,
-                            PWA manifest, generated icon, contact-form action
-public/sw.js                shared service worker (offline + installable)
+├── app/
+│   ├── (auth)/          sign-in / sign-up
+│   ├── dashboard/       apps, AI form, editor, messages, credits & hosting
+│   ├── s/[slug]/        public customer sites: page, legal pages, PWA manifest & icon
+│   ├── dev/             developer tools and simulated checkout (ENABLE_DEV_TOOLS)
+│   ├── api/             auth and media upload endpoints
+│   └── media/           public image delivery
+├── components/          AppRenderer, ImageDropzone, SettingsMenu, …
+├── db/                  Drizzle schema and client
+├── i18n/                German/English dictionaries and helpers
+├── lib/
+│   ├── ai/              provider interface, mock AI, patch operations, pricing
+│   ├── billing/         price catalog, credit ledger, purchases, hosting
+│   └── media/           image validation, processing, storage
+└── proxy.ts             multi-tenant subdomain routing
+drizzle/                 SQL migrations
+tests/                   automated tests
 ```
 
-## Adding a new block type
+## Roadmap
 
-1. Add it to `blockSchema`, `BLOCK_TYPES`, `STARTER` and `newBlock()` in `src/lib/app-definition.ts`
-2. Add its name to `editor.blocks` (and any field labels to `editor.fields`) in **both** languages in `src/i18n/dictionaries.ts`
-3. Render it in `BlockView` (`src/components/AppRenderer.tsx`)
-4. Add its fields in `BlockFields` (`src/app/dashboard/apps/[id]/editor.tsx`)
+- [x] Multi-tenant block editor with live preview, PWA output and subdomains
+- [x] German/English platform UI
+- [x] Pay-as-you-go credit ledger, hosting passes, simulated checkout
+- [x] AI actions behind a provider interface (mock implementation)
+- [x] Drag & drop image uploads with privacy-preserving processing
+- [ ] Claude integration (structured output, strict patch tools, prompt caching, web fetch for reference sites)
+- [ ] Stripe Checkout and webhooks
+- [ ] Free AI preview with quotas and abuse protection
+- [ ] E-mail verification, password reset and hosting-expiry reminders
+- [ ] S3-compatible media storage and cleanup of unused files
+- [ ] Per-site language setting for customer sites
+- [ ] PostgreSQL row-level security as a second layer of tenant isolation
+- [ ] Docker image and one-click deployment (e.g. Coolify on Hetzner)
 
-## Translations (German / English)
+## Contributing
 
-- All platform text lives in `src/i18n/dictionaries.ts`. German (`de`) is the default and the source of truth;
-  TypeScript reports an error if the English (`en`) dictionary is missing a key.
-- Server Components / Server Actions: `const t = await getT()` from `@/i18n/server`
-- Client Components: `const { t, locale } = useI18n()` from `@/i18n/client`
-- The chosen language is stored in the `lang` cookie (set by the settings menu, `src/components/SettingsMenu.tsx`).
+Contributions, bug reports and ideas are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** and the
+**[Code of Conduct](CODE_OF_CONDUCT.md)** first. For security issues, please follow **[SECURITY.md](SECURITY.md)**
+instead of opening a public issue.
 
-## Credits, hosting & AI (billing core)
+## License
 
-Pay-as-you-go credits for AI actions, one-time hosting passes for going online. Everything is real
-production code except two clearly separated stand-ins: the **mock AI provider** and the **simulated checkout**.
+AppBuilder is licensed under the **[GNU Affero General Public License v3.0](LICENSE)** (AGPL-3.0-or-later).
+You may use, study, modify and share it. If you run a modified version as a network service, you must make your
+modified source code available to its users under the same license.
 
-```
-src/lib/billing/
-  catalog.ts          prices, credit packs, hosting passes (the ONLY place prices live; bump PRICE_LIST_VERSION)
-  ledger.ts           credit lots, reserve → capture | release, expiry, history, invariant check
-  billed-action.ts    runBilledAction(): reserve → AI call → charge + save result in ONE transaction
-  purchases.ts        createPurchase / fulfillPurchase (idempotent – shared by dev checkout and future Stripe webhook)
-  payment-provider.ts PaymentProvider interface; "dev" = simulated checkout, "stripe" = TODO
-  hosting.ts          hosting status (active / 14-day grace / lapsed = offline, never deleted)
-src/lib/ai/
-  types.ts            AiProvider interface, site brief, edit requests, token usage
-  patches.ts          patch operations the AI returns + safe applyPatches() (validated, XSS-safe)
-  pricing.ts          model token prices → cost; metered credits (cost × markup, clamped)
-  provider.ts         getAiProvider(); "mock" today, "anthropic" = TODO
-  mock-provider.ts    deterministic demo AI (DE/EN industry templates, simulated token usage)
-```
-
-**How charging works:** credits are *reserved* before an AI call (row-locked, can never go negative, parallel
-requests can't double-spend), then *captured* together with saving the result in one database transaction.
-If the AI call fails, returns nothing useful, or saving fails, the reservation is released – the user pays
-if and only if they get the result. Every AI change is snapshotted, so **undo is always free**.
-
-**Invariant** (checked by tests and shown on /dev): `SUM(credit_transactions) = SUM(lot remaining) + SUM(active holds)`.
-
-### Dev/demo tools (`ENABLE_DEV_TOOLS=true` in `.env`)
-
-- **/dev** – grant test credits to any user, balances with ledger check, unit economics (revenue vs. AI cost), recent purchases
-- **Simulated checkout** – buying credits or hosting opens `/dev/checkout/<id>` instead of Stripe; "Simulate payment" runs the real fulfillment code
-- **CLI:** `npm run dev:grant-credits -- demo@example.test 1000 "Investor demo"`
-- A yellow **TEST MODE** banner is shown on every page while enabled. Never enable on a real production server.
-
-### Replacing the stand-ins later
-
-| Stand-in | Replace with | What to implement |
-|---|---|---|
-| `AI_PROVIDER=mock` | `anthropic` | `AiProvider` with `@anthropic-ai/sdk`: structured output for `generateSite`, strict patch tools (`patchOpSchema`) for `editSite`, prompt caching; return real `response.usage` |
-| `PAYMENT_PROVIDER=dev` | `stripe` | `startCheckout` → Stripe Checkout Session; webhook route calls `fulfillPurchase(purchaseId, sessionId)` |
-
-Nothing else changes: ledger, prices, actions, UI and tests stay as they are.
-
-## Image uploads
-
-The image block uses a drag & drop upload area (`src/components/ImageDropzone.tsx`, also click, keyboard and paste).
-
-```
-POST /api/media        login + app ownership required; multipart `file` + `appId`
-GET  /media/<id>.webp  public, cached forever (IDs are unguessable); works on every customer subdomain
-src/lib/media/
-  limits.ts     5 MB per file, 2000 px longest side, 100 images per app, accepted types
-  images.ts     real type detection from file bytes (no SVG), sharp: rotate, resize, re-encode to WebP
-                → strips all metadata incl. GPS location (GDPR)
-  storage.ts    MediaStorage interface: local disk (MEDIA_DIR, default ./data/uploads – git-ignored);
-                S3 / Hetzner Object Storage = TODO
-  uploads.ts    saveImageUpload(): validation, processing, storage, database row
-```
-
-TODO before launch: delete files of removed images/apps (rows cascade, files on disk stay) and back up the media storage.
-
-## AI reference URLs
-
-The "Create with AI" form has two optional fields: the customer's **existing website** (source for facts like
-services and contact details) and a **design inspiration** website (source for style only – colours, layout, tone;
-never texts, images or logos). Both are normalised (`firma.de` → `https://firma.de/`), restricted to public
-http(s) addresses (`src/lib/ai/reference-url.ts`) and stored with the app in `apps.ai_brief`.
-The mock AI only borrows a colour from the inspiration site; the real provider will read both pages via
-Anthropic's server-side web fetch (see `src/lib/ai/provider.ts`).
-
-### Tests
-
-```bash
-npm test
-```
-Runs against `TEST_DATABASE_URL` (a separate database, `appbuilder_test`) – never your dev data. Covers
-concurrency, expiry order, refunds on failure, idempotent purchases, hosting states, patch safety and the mock AI.
-
-## Before going live (checklist)
-
-- [ ] Real Impressum and Datenschutzerklärung for the platform (`src/app/impressum`, `src/app/datenschutz`)
-- [ ] AGB and AVV (data processing agreement) documents linked at sign-up
-- [ ] E-mail verification and password reset (Better Auth `sendVerificationEmail`, e.g. via Brevo)
-- [ ] `ROOT_DOMAIN`, `BETTER_AUTH_URL`, strong `BETTER_AUTH_SECRET` and `DATABASE_URL` in production
-- [ ] Wildcard DNS `*.yourdomain` → server, wildcard TLS certificate
-- [ ] Automated, encrypted, off-site database backups
-- [ ] Postgres row-level security as a second layer of tenant isolation
-- [ ] `ENABLE_DEV_TOOLS` removed/false, real `AI_PROVIDER` and `PAYMENT_PROVIDER` configured
-- [ ] Scheduled job calling `sweepExpired()` (expired credits, stale holds) and hosting-expiry reminder e-mails
+Copyright © 2026 Bailin Zheng
