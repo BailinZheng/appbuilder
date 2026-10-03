@@ -18,6 +18,7 @@ import type { App } from "@/db/schema";
 import { formatDate } from "@/i18n/format";
 import { hostingStatus } from "@/lib/billing/hosting";
 import { deleteApp, saveApp, setPublished } from "../../actions";
+import { ImageDropzone } from "@/components/ImageDropzone";
 import { AiPanel } from "./ai-panel";
 
 type Tab = "ai" | "content" | "design" | "legal";
@@ -190,7 +191,7 @@ export function Editor({ app, publicUrl, submissionCount, balance, canUndo }: Ed
                       <button onClick={() => setBlocks(blocks.filter((_, j) => j !== i))} className="rounded px-2 text-red-600 hover:bg-red-50" aria-label={t.editor.deleteBlock}>✕</button>
                     </div>
                   </div>
-                  <BlockFields block={b} f={t.editor.fields} onChange={(p) => updateBlock(i, p)} />
+                  <BlockFields block={b} appId={app.id} f={t.editor.fields} onChange={(p) => updateBlock(i, p)} />
                 </div>
               ))}
               <div className="rounded-xl border border-dashed p-3">
@@ -262,10 +263,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function BlockFields({
   block: b,
+  appId,
   f,
   onChange,
 }: {
   block: Block;
+  appId: string;
   f: Dictionary["editor"]["fields"];
   onChange: (p: Partial<Block>) => void;
 }) {
@@ -284,7 +287,16 @@ function BlockFields({
     case "text":
       return <div className="space-y-2">{text("heading", f.heading, b.heading)}{text("body", f.text, b.body, true)}</div>;
     case "image":
-      return <div className="space-y-2">{text("url", f.imageUrl, b.url)}{text("alt", f.alt, b.alt)}</div>;
+      return (
+        <div className="space-y-2">
+          {/* Not a <label>: a label around the drop area would open the file picker a second time */}
+          <div className="space-y-1">
+            <span className="text-xs font-medium text-zinc-600">{f.imageUrl}</span>
+            <ImageDropzone appId={appId} value={b.url} alt={b.alt} onChange={(url) => onChange({ url })} />
+          </div>
+          {text("alt", f.alt, b.alt)}
+        </div>
+      );
     case "button":
       return <div className="space-y-2">{text("label", f.label, b.label)}{text("href", f.link, b.href)}</div>;
     case "hours":

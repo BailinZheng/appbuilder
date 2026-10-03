@@ -1,7 +1,7 @@
 import "server-only";
 import type { Locale } from "@/i18n/config";
 import type { Block } from "@/lib/app-definition";
-import { COLOR_WORDS, INSTRUCTION_WORDS, industryCopy, PALETTE, UI } from "./mock-content";
+import { BRAND_COLORS, COLOR_WORDS, INSTRUCTION_WORDS, industryCopy, PALETTE, UI } from "./mock-content";
 import type { PatchOp } from "./patches";
 import type { AiProvider, AiUsage, EditRequest, Section, SiteBrief, SiteSnapshot, Tone } from "./types";
 
@@ -50,7 +50,20 @@ function generate(brief: SiteBrief, locale: Locale): SiteSnapshot {
     blocks.push({ id: bid(), type: "button", label: t.callUs, href: `tel:${brief.phone.replace(/[^\d+]/g, "")}` });
   }
   blocks.push({ id: bid(), type: "contact", title: t.contactTitle, submitLabel: t.send });
-  return { name: brief.businessName, themeColor: c.color, definition: { version: 1, blocks } };
+  return { name: brief.businessName, themeColor: inspirationColor(brief.inspirationUrl) ?? c.color, definition: { version: 1, blocks } };
+}
+
+/**
+ * The mock cannot visit websites, so it only borrows a brand colour from the inspiration URL
+ * (known brands, otherwise a stable pick from the palette). The real provider reads the page itself.
+ */
+function inspirationColor(url: string): string | null {
+  if (!url) return null;
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  const known = Object.entries(BRAND_COLORS).find(([domain]) => host === domain || host.endsWith(`.${domain}`));
+  if (known) return known[1];
+  const hash = [...host].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  return PALETTE[hash % PALETTE.length];
 }
 
 function sectionBlock(section: Section, locale: Locale, site: SiteSnapshot): Block {

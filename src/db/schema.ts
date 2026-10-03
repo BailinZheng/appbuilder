@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { bigint, boolean, check, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import type { AppDefinition, LegalInfo } from "@/lib/app-definition";
+import type { SiteBrief } from "@/lib/ai/types";
 
 // ---------------------------------------------------------------------------
 // Better Auth tables (field names must match Better Auth's model fields)
@@ -88,10 +89,34 @@ export const apps = pgTable(
     published: boolean("published").notNull().default(false),
     // Paid hosting period (hosting pass). Publicly reachable while in the future (+ grace period).
     hostedUntil: timestamp("hosted_until"),
+    // The "Create with AI" form input (incl. reference URLs) – kept for regenerating and the real AI later.
+    aiBrief: jsonb("ai_brief").$type<SiteBrief>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [index("apps_owner_id_idx").on(t.ownerId)],
+);
+
+/** Images uploaded by app owners. Files live in the media storage (local disk now, object storage later). */
+export const media = pgTable(
+  "media",
+  {
+    id: text("id").primaryKey(), // unguessable – it is part of the public URL
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    contentType: text("content_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    originalName: text("original_name").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("media_app_id_idx").on(t.appId)],
 );
 
 /** Snapshots taken before every AI change – powers the free "undo". */

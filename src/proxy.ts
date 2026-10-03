@@ -20,6 +20,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip Next internals, the auth API, the shared service worker and static files.
-  matcher: ["/((?!_next/|api/|sw\\.js|favicon\\.ico).*)"],
+  // Skip Next internals, APIs, uploaded media, the shared service worker and static files.
+  matcher: ["/((?!_next/|api/|media/|sw\\.js|favicon\\.ico).*)"],
 };

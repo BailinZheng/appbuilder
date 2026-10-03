@@ -15,6 +15,13 @@
       "when": 1790711318889,
       "tag": "0001_billing_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791036187824,
+      "tag": "0002_media_and_ai_brief",
+      "breakpoints": true
     }
   ]
 }
