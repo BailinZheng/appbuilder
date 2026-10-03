@@ -114,6 +114,33 @@ if and only if they get the result. Every AI change is snapshotted, so **undo is
 
 Nothing else changes: ledger, prices, actions, UI and tests stay as they are.
 
+## Image uploads
+
+The image block uses a drag & drop upload area (`src/components/ImageDropzone.tsx`, also click, keyboard and paste).
+
+```
+POST /api/media        login + app ownership required; multipart `file` + `appId`
+GET  /media/<id>.webp  public, cached forever (IDs are unguessable); works on every customer subdomain
+src/lib/media/
+  limits.ts     5 MB per file, 2000 px longest side, 100 images per app, accepted types
+  images.ts     real type detection from file bytes (no SVG), sharp: rotate, resize, re-encode to WebP
+                → strips all metadata incl. GPS location (GDPR)
+  storage.ts    MediaStorage interface: local disk (MEDIA_DIR, default ./data/uploads – git-ignored);
+                S3 / Hetzner Object Storage = TODO
+  uploads.ts    saveImageUpload(): validation, processing, storage, database row
+```
+
+TODO before launch: delete files of removed images/apps (rows cascade, files on disk stay) and back up the media storage.
+
+## AI reference URLs
+
+The "Create with AI" form has two optional fields: the customer's **existing website** (source for facts like
+services and contact details) and a **design inspiration** website (source for style only – colours, layout, tone;
+never texts, images or logos). Both are normalised (`firma.de` → `https://firma.de/`), restricted to public
+http(s) addresses (`src/lib/ai/reference-url.ts`) and stored with the app in `apps.ai_brief`.
+The mock AI only borrows a colour from the inspiration site; the real provider will read both pages via
+Anthropic's server-side web fetch (see `src/lib/ai/provider.ts`).
+
 ### Tests
 
 ```bash

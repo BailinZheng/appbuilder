@@ -2,9 +2,27 @@ import { z } from "zod";
 import type { Locale } from "@/i18n/config";
 import type { AppDefinition } from "@/lib/app-definition";
 import type { PatchOp } from "./patches";
+import { MAX_REFERENCE_URL_LENGTH, normalizeReferenceUrl } from "./reference-url";
 
 export const INDUSTRIES = ["bakery", "hairdresser", "restaurant", "craftsman", "fitness", "other"] as const;
 export type Industry = (typeof INDUSTRIES)[number];
+
+/** Optional reference URL: "" stays "", anything else must normalise to a public http(s) URL. */
+const referenceUrl = (message: string) =>
+  z
+    .string()
+    .trim()
+    .max(MAX_REFERENCE_URL_LENGTH)
+    .default("")
+    .transform((v, ctx) => {
+      if (!v) return "";
+      const url = normalizeReferenceUrl(v);
+      if (!url) {
+        ctx.addIssue({ code: "custom", message });
+        return z.NEVER;
+      }
+      return url;
+    });
 
 /** What the user fills in on the guided "Create with AI" form. */
 export const siteBriefSchema = z.object({
@@ -14,6 +32,10 @@ export const siteBriefSchema = z.object({
   services: z.string().trim().max(500),
   tone: z.enum(["friendly", "professional"]),
   phone: z.string().trim().max(40),
+  /** The customer's current or previous website – a source for content (services, contact details). */
+  existingSiteUrl: referenceUrl("existingSiteUrl"),
+  /** A website whose look the customer likes – a source for style only, never for content or logos. */
+  inspirationUrl: referenceUrl("inspirationUrl"),
 });
 export type SiteBrief = z.infer<typeof siteBriefSchema>;
 

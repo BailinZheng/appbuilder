@@ -20,7 +20,17 @@ import { getBalance, InsufficientCreditsError } from "@/lib/billing/ledger";
 // Error codes are returned (not texts) so the client shows them in the current language.
 export type AiError =
   | { code: "insufficient"; required: number; available: number }
-  | { code: "invalidBrief" | "slugInvalid" | "slugReserved" | "slugTaken" | "notFound" | "failed" };
+  | {
+      code:
+        | "invalidBrief"
+        | "invalidExistingUrl"
+        | "invalidInspirationUrl"
+        | "slugInvalid"
+        | "slugReserved"
+        | "slugTaken"
+        | "notFound"
+        | "failed";
+    };
 
 function toAiError(e: unknown): AiError {
   if (e instanceof InsufficientCreditsError) return { code: "insufficient", required: e.required, available: e.available };
@@ -38,7 +48,12 @@ export async function generateSiteAction(_prev: GenerateState, formData: FormDat
   const user = await requireUser();
   const locale = await getLocale();
   const brief = siteBriefSchema.safeParse(Object.fromEntries(formData));
-  if (!brief.success) return { error: { code: "invalidBrief" } };
+  if (!brief.success) {
+    const fields = brief.error.issues.map((i) => i.path[0]);
+    if (fields.includes("existingSiteUrl")) return { error: { code: "invalidExistingUrl" } };
+    if (fields.includes("inspirationUrl")) return { error: { code: "invalidInspirationUrl" } };
+    return { error: { code: "invalidBrief" } };
+  }
 
   const slug = String(formData.get("slug") ?? "").toLowerCase();
   const slugProblem = slugError(slug);
@@ -67,6 +82,7 @@ export async function generateSiteAction(_prev: GenerateState, formData: FormDat
           name: site.name,
           themeColor: site.themeColor,
           definition: site.definition,
+          aiBrief: brief.data,
           legal: { ...emptyLegal, businessName: site.name, owner: user.name, email: user.email, phone: brief.data.phone },
         });
       },

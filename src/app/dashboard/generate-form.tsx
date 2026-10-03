@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { useI18n } from "@/i18n/client";
 import type { Dictionary } from "@/i18n/dictionaries";
+import { MAX_REFERENCE_URL_LENGTH, normalizeReferenceUrl } from "@/lib/ai/reference-url";
 import { INDUSTRIES } from "@/lib/ai/types";
 import { ACTION_PRICES } from "@/lib/billing/catalog";
 import { generateSiteAction, type AiError, type GenerateState } from "./ai-actions";
@@ -15,6 +16,9 @@ export function aiErrorText(t: Dictionary, e: AiError) {
       return t.ai.insufficient(e.required, e.available);
     case "invalidBrief":
       return t.ai.invalidBrief;
+    case "invalidExistingUrl":
+    case "invalidInspirationUrl":
+      return t.ai[e.code];
     case "slugInvalid":
     case "slugReserved":
     case "slugTaken":
@@ -24,6 +28,52 @@ export function aiErrorText(t: Dictionary, e: AiError) {
     case "failed":
       return t.ai.failed;
   }
+}
+
+/** Optional URL input: completes "firma.de" to "https://firma.de/" on blur and flags invalid addresses. */
+function ReferenceUrlField({ name, label, hint, serverError }: { name: string; label: string; hint: string; serverError: boolean }) {
+  const { t } = useI18n();
+  const [value, setValue] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const hintId = `${name}-hint`;
+  const showError = invalid || (serverError && value !== "");
+  return (
+    <label className="block space-y-1">
+      <span className="text-xs font-medium text-zinc-600">{label}</span>
+      <div className="relative">
+        <svg className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+        <input
+          name={name}
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          spellCheck={false}
+          maxLength={MAX_REFERENCE_URL_LENGTH}
+          placeholder="https://"
+          value={value}
+          aria-invalid={showError}
+          aria-describedby={hintId}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setInvalid(false);
+          }}
+          onBlur={() => {
+            if (!value.trim()) return setValue("");
+            const normalized = normalizeReferenceUrl(value);
+            if (normalized) setValue(normalized);
+            setInvalid(!normalized);
+          }}
+          className={`w-full rounded-lg border py-2 pr-3 pl-9 text-sm ${showError ? "border-red-400 bg-red-50/40" : ""}`}
+        />
+      </div>
+      <span id={hintId} className={`block text-xs ${showError ? "text-red-600" : "text-zinc-500"}`}>
+        {showError ? t.ai.invalidUrl : hint}
+      </span>
+    </label>
+  );
 }
 
 export function GenerateForm({ balance }: { balance: number }) {
@@ -96,6 +146,21 @@ export function GenerateForm({ balance }: { balance: number }) {
           <input name="phone" type="tel" maxLength={40} className={input} />
         </label>
       </div>
+      <fieldset className="space-y-3 border-t pt-3">
+        <legend className="pr-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t.ai.referencesTitle}</legend>
+        <ReferenceUrlField
+          name="existingSiteUrl"
+          label={t.ai.existingSiteUrl}
+          hint={t.ai.existingSiteHint}
+          serverError={state.error?.code === "invalidExistingUrl"}
+        />
+        <ReferenceUrlField
+          name="inspirationUrl"
+          label={t.ai.inspirationUrl}
+          hint={t.ai.inspirationHint}
+          serverError={state.error?.code === "invalidInspirationUrl"}
+        />
+      </fieldset>
       {state.error && (
         <p className="text-sm text-red-600">
           {aiErrorText(t, state.error)}{" "}

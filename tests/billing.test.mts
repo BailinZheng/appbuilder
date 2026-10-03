@@ -59,7 +59,7 @@ before(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    sql`TRUNCATE ai_usage, credit_transactions, credit_holds, credit_lots, purchases, app_versions, submissions, apps, session, account, "user" CASCADE`,
+    sql`TRUNCATE media, ai_usage, credit_transactions, credit_holds, credit_lots, purchases, app_versions, submissions, apps, session, account, "user"`,
   );
 });
 
@@ -303,7 +303,7 @@ describe("hosting status", () => {
 });
 
 describe("AI core", () => {
-  const brief = { businessName: "Bäckerei Test", industry: "bakery", city: "Berlin", services: "Brot, Brötchen", tone: "friendly", phone: "+49 30 123" } as const;
+  const brief = { businessName: "Bäckerei Test", industry: "bakery", city: "Berlin", services: "Brot, Brötchen", tone: "friendly", phone: "+49 30 123", existingSiteUrl: "", inspirationUrl: "" } as const;
 
   test("mock generation produces a valid site", async () => {
     const { output, usage } = await mockProvider.generateSite(brief, "de");

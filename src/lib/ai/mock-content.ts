@@ -154,6 +154,23 @@ export const UI = {
   },
 } satisfies Record<Locale, unknown>;
 
+/** Brand colours the mock "borrows" from well-known inspiration sites. */
+export const BRAND_COLORS: Record<string, string> = {
+  "youtube.com": "#dc2626",
+  "google.com": "#1a73e8",
+  "google.de": "#1a73e8",
+  "microsoft.com": "#0067b8",
+  "apple.com": "#111827",
+  "amazon.com": "#ea580c",
+  "amazon.de": "#ea580c",
+  "spotify.com": "#15803d",
+  "airbnb.com": "#e11d48",
+  "facebook.com": "#1877f2",
+  "instagram.com": "#c13584",
+  "netflix.com": "#b91c1c",
+  "linkedin.com": "#0a66c2",
+};
+
 export const PALETTE = ["#2563eb", "#b45309", "#be185d", "#15803d", "#7c3aed", "#0f766e", "#dc2626", "#111827"];
 
 /** Keyword → colour for free-form instructions (German and English). */
