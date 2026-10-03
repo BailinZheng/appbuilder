@@ -50,7 +50,7 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 |---|---|
 | ![Dashboard with the Create with AI form](docs/screenshots/dashboard.jpg) | ![Editor with AI actions and phone preview](docs/screenshots/editor-ai.jpg) |
 | **Credits & hosting** | **Published site on a phone** |
-| ![Credit packs, hosting passes and price list](docs/screenshots/billing.jpg) | <img src="docs/screenshots/mobile-site.jpg" alt="Generated website on a phone" width="260"> |
+| ![Credit packs, hosting passes and price list](docs/screenshots/billing.jpg) | <img src="docs/screenshots/mobile-site.jpg" alt="Generated website on a phone" width="200"> |
 
 <sub>Screenshots show the local development build with demo data; the yellow banner marks test mode.</sub>
 
