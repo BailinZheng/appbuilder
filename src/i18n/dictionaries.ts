@@ -244,7 +244,7 @@ const de = {
     extend: "Verlängern",
   },
   dev: {
-    banner: "TESTMODUS – simulierte Zahlungen und Demo-KI. Nicht für echte Kunden.",
+    banner: "TESTMODUS – Testguthaben und simulierte Zahlungen. Nicht für echte Kunden.",
     title: "Entwickler-Tools",
     link: "Dev-Tools",
     grantTitle: "Test-Credits vergeben",
@@ -517,7 +517,7 @@ const en: Dictionary = {
     extend: "Extend",
   },
   dev: {
-    banner: "TEST MODE – simulated payments and demo AI. Not for real customers.",
+    banner: "TEST MODE – test credits and simulated payments. Not for real customers.",
     title: "Developer tools",
     link: "Dev tools",
     grantTitle: "Grant test credits",

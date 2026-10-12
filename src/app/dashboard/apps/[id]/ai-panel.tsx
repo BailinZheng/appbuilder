@@ -12,11 +12,13 @@ type Props = {
   appId: string;
   initialBalance: number;
   initialCanUndo: boolean;
+  /** The deterministic mock provider is active – say so, so nobody mistakes it for real AI. */
+  demoAi: boolean;
   dirty: boolean;
   onApplied: (site: SiteSnapshot) => void;
 };
 
-export function AiPanel({ appId, initialBalance, initialCanUndo, dirty, onApplied }: Props) {
+export function AiPanel({ appId, initialBalance, initialCanUndo, demoAi, dirty, onApplied }: Props) {
   const { t } = useI18n();
   const [balance, setBalance] = useState(initialBalance);
   const [canUndo, setCanUndo] = useState(initialCanUndo);
@@ -59,7 +61,7 @@ export function AiPanel({ appId, initialBalance, initialCanUndo, dirty, onApplie
         </Link>
       </div>
 
-      <p className="rounded-lg bg-violet-50 p-2.5 text-xs text-violet-800">{t.ai.demoNote}</p>
+      {demoAi && <p className="rounded-lg bg-violet-50 p-2.5 text-xs text-violet-800">{t.ai.demoNote}</p>}
       {dirty && <p className="rounded-lg bg-amber-50 p-2.5 text-sm text-amber-800">{t.ai.saveFirst}</p>}
 
       <div className="space-y-3 rounded-xl border bg-white p-4">

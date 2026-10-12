@@ -1,6 +1,7 @@
 import { and, count, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db, schema } from "@/db";
+import { getAiProvider } from "@/lib/ai/provider";
 import { requireUser } from "@/lib/auth";
 import { getBalance } from "@/lib/billing/ledger";
 import { appUrl } from "@/lib/urls";
@@ -21,6 +22,13 @@ export default async function EditAppPage({ params }: PageProps<"/dashboard/apps
   ]);
 
   return (
-    <Editor app={app} publicUrl={appUrl(app.slug)} submissionCount={n} balance={balance} canUndo={versions > 0} />
+    <Editor
+      app={app}
+      publicUrl={appUrl(app.slug)}
+      submissionCount={n}
+      balance={balance}
+      canUndo={versions > 0}
+      demoAi={getAiProvider().id === "mock"}
+    />
   );
 }

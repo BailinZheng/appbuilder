@@ -72,7 +72,10 @@ src/lib/ai/
   types.ts           AiProvider interface, site brief, edit requests, token usage
   patches.ts         patch operations returned by the AI + applyPatches() (validated, id/type immutable)
   pricing.ts         model token prices → cost; metered credits
-  provider.ts        getAiProvider(): "mock" today, "anthropic" planned
+  provider.ts        getAiProvider(): "mock" (default) or "anthropic"
+  anthropic-provider.ts  Claude: structured output, strict patch tools, web fetch, prompt caching, usage
+  anthropic-prompts.ts   frozen system prompts (cacheable) and per-request user messages
+  json-schema.ts     Zod → JSON schema in the subset Claude enforces (closed objects, const/enum kept)
   mock-provider.ts   deterministic demo AI (German/English industry templates, simulated token usage)
   reference-url.ts   normalisation and validation of reference URLs
 ```
@@ -82,14 +85,39 @@ src/lib/ai/
 - **Reference URLs.** The brief may contain the customer's existing website (a source of facts such as services and
   contact details) and a design-inspiration website (a source of style only – colours, layout, tone; never texts,
   images or logos). Both are normalised (`firma.de` → `https://firma.de/`), limited to public http(s) hosts so they
-  can never point at internal infrastructure, and stored in `apps.ai_brief`. The planned Claude provider will read
-  them with Anthropic's server-side web fetch tool, so the platform itself never fetches arbitrary URLs.
+  can never point at internal infrastructure, and stored in `apps.ai_brief`. The Claude provider reads them with
+  Anthropic's server-side web fetch tool, so the platform itself never fetches arbitrary URLs.
+
+### Claude provider
+
+`AI_PROVIDER=anthropic` with `ANTHROPIC_API_KEY` (model: `ANTHROPIC_MODEL`, default `claude-opus-5-5`).
+
+- **Generate = structured output.** `output_config.format` constrains the answer to the site schema (blocks without
+  ids – ids are always assigned by us). The answer is parsed with the same Zod schema and validated like any other
+  site before anyone is charged.
+- **Edit = strict patch tools.** One tool per patch operation with `strict: true`, so every call matches its schema.
+  Each call is applied to a working copy immediately; errors (unknown block, a field the block type does not have,
+  an unsafe link) go back to Claude as `is_error` tool results so it can correct itself, for up to 5 round trips.
+  The provider returns the successful operations, which the action re-applies to the stored site. Forced
+  `tool_choice` is not used – Claude Opus 5.5 rejects it – so “no change” is a valid answer and costs nothing.
+- **Reference sites = web fetch.** The `web_fetch` server tool is only added when the brief has reference URLs, and
+  `allowed_domains` limits it to those hosts (max. 4 fetches, 15k tokens each). The prompt treats the existing site
+  as a source of facts and the inspiration site as a source of style only, and all fetched content as untrusted data.
+  Paused server-tool turns (`pause_turn`) are resumed.
+- **Prompt caching.** The system prompts are frozen strings with a cache breakpoint; everything that varies (brief,
+  site, language, request) comes after it. Automatic caching also covers the growing conversation in the edit loop.
+- **Billing stays exact.** Usage of every request (input, output incl. thinking, cache reads and writes) is summed
+  and recorded. Refusals and truncated answers throw, so the credit reservation is released. Server-side refusal
+  fallbacks (`fallbacks: "default"`) are enabled; if a fallback model answers, the whole action is billed at that
+  model's price (`MODEL_PRICES`).
+- **Effort.** Generation runs at `medium`, edits at `low`, which keeps a free-form instruction well inside its
+  credit range. Each API attempt times out after 3 minutes (2 retries), below the 15-minute credit hold.
+
 
 ### Replacing the stand-ins
 
 | Stand-in | Replace with | What to implement |
 |---|---|---|
-| `AI_PROVIDER=mock` | `anthropic` | `AiProvider` with `@anthropic-ai/sdk`: structured output for `generateSite`, strict patch tools (`patchOpSchema`) for `editSite`, prompt caching; return real `usage` |
 | `PAYMENT_PROVIDER=dev` | `stripe` | `startCheckout` → Stripe Checkout Session; a webhook route calls `fulfillPurchase(purchaseId, sessionId)` |
 | `MEDIA_STORAGE=local` | `s3` | `MediaStorage` for S3-compatible object storage (e.g. an EU region) |
 
@@ -138,7 +166,8 @@ npm test
 Tests run with the Node.js test runner against `TEST_DATABASE_URL` (never the development database) and cover:
 parallel reservations, expiry order, stale holds, refunds on failed AI calls and failed saves, idempotent purchases,
 hosting states, patch safety (unsafe links, immutable ids), upload validation and metadata stripping, storage path
-safety, and reference-URL validation. CI runs the same suite against PostgreSQL on every push and pull request.
+safety, reference-URL validation, and the Claude provider against a scripted fake API (strict schemas, the
+patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, usage and fallback pricing). CI runs the same suite against PostgreSQL on every push and pull request.
 
 ## Production readiness checklist
 
@@ -149,5 +178,6 @@ safety, and reference-URL validation. CI runs the same suite against PostgreSQL 
 - [ ] Wildcard DNS `*.your-domain` and a wildcard TLS certificate
 - [ ] Automated, encrypted, off-site backups of the database and media storage
 - [ ] PostgreSQL row-level security
-- [ ] `ENABLE_DEV_TOOLS` off; real `AI_PROVIDER`, `PAYMENT_PROVIDER` and `MEDIA_STORAGE`
+- [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, real `PAYMENT_PROVIDER` and `MEDIA_STORAGE`
+- [ ] Anthropic as a sub-processor in the privacy policy and DPA list (briefs, site texts and fetched reference pages are sent to the Claude API)
 - [ ] Scheduled job for `sweepExpired()` (expired credits, stale holds), hosting-expiry reminder e-mails and cleanup of unused media files

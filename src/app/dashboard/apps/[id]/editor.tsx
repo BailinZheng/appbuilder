@@ -35,9 +35,10 @@ type EditorProps = {
   submissionCount: number;
   balance: number;
   canUndo: boolean;
+  demoAi: boolean;
 };
 
-export function Editor({ app, publicUrl, submissionCount, balance, canUndo }: EditorProps) {
+export function Editor({ app, publicUrl, submissionCount, balance, canUndo, demoAi }: EditorProps) {
   const router = useRouter();
   const { locale, t } = useI18n();
   const [tab, setTab] = useState<Tab>("ai");
@@ -176,7 +177,14 @@ export function Editor({ app, publicUrl, submissionCount, balance, canUndo }: Ed
 
           {/* Kept mounted so balance and last result survive tab switches */}
           <div hidden={tab !== "ai"}>
-            <AiPanel appId={app.id} initialBalance={balance} initialCanUndo={canUndo} dirty={dirty} onApplied={applySite} />
+            <AiPanel
+              appId={app.id}
+              initialBalance={balance}
+              initialCanUndo={canUndo}
+              demoAi={demoAi}
+              dirty={dirty}
+              onApplied={applySite}
+            />
           </div>
 
           {tab === "content" && (

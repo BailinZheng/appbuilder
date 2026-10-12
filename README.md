@@ -19,9 +19,9 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 
 ---
 
-> **Status: early development (pre-alpha).** The full product flow works end to end locally. The AI model and the
-> payment provider are still replaced by clearly separated stand-ins (a deterministic mock AI and a simulated checkout)
-> behind production-ready interfaces – see [Roadmap](#roadmap).
+> **Status: early development (pre-alpha).** The full product flow works end to end locally. AI runs on Claude
+> (`AI_PROVIDER=anthropic`) or on a deterministic mock that needs no API key; payments are still a simulated checkout
+> behind a production-ready interface – see [Roadmap](#roadmap).
 
 ## Features
 
@@ -40,7 +40,7 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 - 🏢 **Multi-tenant by design** – one codebase serves the platform and all customer sites (`<slug>.your-domain`)
 - 💳 **Pay-as-you-go credit ledger** – reserve → capture/release in a single transaction, row-locked against double spending, expiring credit lots, append-only history and a verified ledger invariant
 - 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted
-- 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations today, real ones without redesign
+- 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations for local work, real ones without redesign
 - 🛡️ **Security-minded** – tenant isolation on every query, XSS-safe link validation, content-based upload type detection, SSRF-safe reference URLs, security headers
 - ✅ **Tested** – 29 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, upload safety …) and CI on every push
 
@@ -116,7 +116,9 @@ To try the full flow: sign up, grant yourself test credits on `/dev`, then use *
 | `ROOT_DOMAIN` | yes | Domain whose subdomains are customer sites (`localhost` in development) |
 | `TEST_DATABASE_URL` | for tests | Separate database used by `npm test` |
 | `ENABLE_DEV_TOOLS` | no | `true` enables `/dev`, test credits and the simulated checkout. **Never in production.** |
-| `AI_PROVIDER` | no | `mock` (default). `anthropic` is planned. |
+| `AI_PROVIDER` | no | `mock` (default, no API key needed) or `anthropic` (Claude) |
+| `ANTHROPIC_API_KEY` | with `anthropic` | API key from the Claude Console |
+| `ANTHROPIC_MODEL` | no | `claude-opus-5-5` (default) or `claude-sonnet-5-5` |
 | `PAYMENT_PROVIDER` | no | `dev` (simulated checkout, default). `stripe` is planned. |
 | `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default). S3-compatible storage is planned. |
 | `MOCK_AI_LATENCY_MS` | no | Simulated AI response time for the mock provider |
@@ -146,7 +148,7 @@ flowchart LR
     App --> Media["Media<br/>validation · sharp · storage"]
     Billing --> DB[(PostgreSQL)]
     App --> DB
-    AI -. "mock today<br/>Claude planned" .-> Model["AI model"]
+    AI -. "Claude<br/>or mock" .-> Model["AI model"]
     Billing -. "simulated today<br/>Stripe planned" .-> Pay["Payments"]
     Media --> Files[("File storage<br/>local · S3 planned")]
 ```
@@ -156,7 +158,7 @@ Key design decisions:
 - **Sites are data, not generated code.** Every customer site is a small, validated JSON document of blocks rendered
   by one shared engine. AI output stays small and cheap, every change is reviewable, and there is no untrusted code to host.
 - **AI edits are patches.** The model returns operations (`add_block`, `update_block`, `set_theme` …) that are
-  validated before they are applied – the same schema will become strict tool definitions for the real model.
+  validated before they are applied – Claude receives them as strict tool definitions.
 - **Charge if and only if the user gets the result.** Credits are reserved first; the charge and the saved result
   are committed in one database transaction, and failures release the reservation automatically.
 
@@ -178,7 +180,7 @@ src/
 ├── db/                  Drizzle schema and client
 ├── i18n/                German/English dictionaries and helpers
 ├── lib/
-│   ├── ai/              provider interface, mock AI, patch operations, pricing
+│   ├── ai/              provider interface, Claude and mock providers, patch operations, pricing
 │   ├── billing/         price catalog, credit ledger, purchases, hosting
 │   └── media/           image validation, processing, storage
 └── proxy.ts             multi-tenant subdomain routing
@@ -193,7 +195,7 @@ tests/                   automated tests
 - [x] Pay-as-you-go credit ledger, hosting passes, simulated checkout
 - [x] AI actions behind a provider interface (mock implementation)
 - [x] Drag & drop image uploads with privacy-preserving processing
-- [ ] Claude integration (structured output, strict patch tools, prompt caching, web fetch for reference sites)
+- [x] Claude integration (structured output, strict patch tools, prompt caching, web fetch for reference sites)
 - [ ] Stripe Checkout and webhooks
 - [ ] Free AI preview with quotas and abuse protection
 - [ ] E-mail verification, password reset and hosting-expiry reminders

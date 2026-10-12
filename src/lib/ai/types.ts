@@ -64,9 +64,9 @@ export type AiUsage = {
 export type AiResult<T> = { output: T; usage: AiUsage };
 
 /**
- * Everything the app needs from an AI model. The mock provider implements it today;
- * an Anthropic provider (structured outputs + strict patch tools) replaces it later
- * without changes to billing, actions or UI.
+ * Everything the app needs from an AI model. Implemented by the Claude provider (structured outputs +
+ * strict patch tools) and by a deterministic mock for local work and tests. Billing, actions and UI
+ * work the same with both.
  */
 export interface AiProvider {
   readonly id: "mock" | "anthropic";
