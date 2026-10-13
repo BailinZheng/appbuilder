@@ -37,7 +37,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "test": "tsx --conditions=react-server --test --test-concurrency=1 tests/*.test.mts",
-    "dev:grant-credits": "tsx --conditions=react-server scripts/grant-credits.mts"
+    "dev:grant-credits": "tsx --conditions=react-server scripts/grant-credits.mts",
+    "jobs:daily": "tsx --conditions=react-server scripts/daily-jobs.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -45,6 +46,7 @@
     "drizzle-orm": "^0.45.3",
     "nanoid": "^6.0.1",
     "next": "16.3.7",
+    "nodemailer": "^10.1.0",
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -56,6 +58,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.4",

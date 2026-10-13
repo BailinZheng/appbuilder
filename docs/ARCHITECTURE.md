@@ -8,6 +8,7 @@ This document explains how AppBuilder is put together. For setup instructions se
 - [AI layer](#ai-layer)
 - [Image uploads](#image-uploads)
 - [Internationalisation](#internationalisation)
+- [Accounts, e-mail and the daily job](#accounts-e-mail-and-the-daily-job)
 - [Developer tools](#developer-tools)
 - [Testing](#testing)
 - [Production readiness checklist](#production-readiness-checklist)
@@ -96,8 +97,8 @@ runs the AI, then records the AI usage (`credits_charged = 0`) and saves the sit
 - **Atomic.** Limits are checked and the attempt recorded under a PostgreSQL advisory lock, so parallel requests cannot
   slip past them. A failed AI call does not use up the user's preview but still counts towards the network and global
   limits, so failures cannot be used to hammer the AI.
-- **Abuse protection.** Accounts are free and not yet e-mail-verified, so the per-network and global limits are what
-  cap the cost. The client IP is the entry the reverse proxy appended to `X-Forwarded-For` (`TRUST_PROXY_HOPS`);
+- **Abuse protection.** Accounts need a confirmed e-mail address before they can sign in, so the per-user limit is
+  tied to a real mailbox; the per-network and global limits cap the cost of throwaway addresses. The client IP is the entry the reverse proxy appended to `X-Forwarded-For` (`TRUST_PROXY_HOPS`);
   IPv6 addresses count per /64. A honeypot form field turns simple bots away; Better Auth rate-limits sign-ups.
 - **Privacy.** Only an HMAC of the network (keyed with `BETTER_AUTH_SECRET`) is stored, and it is deleted after two
   days. Without a known client IP, the per-network limit does not apply – the global limits still do.
@@ -184,6 +185,30 @@ drag & drop, click, keyboard and paste, with progress, preview and localised err
 - The language is stored in the functional `lang` cookie, set by `src/components/SettingsMenu.tsx`.
 - Server actions return error *codes* rather than texts, so messages follow a language switch.
 
+## Accounts, e-mail and the daily job
+
+```
+src/lib/auth.ts            Better Auth: e-mail confirmation required, password reset, user language
+src/lib/mail/mailer.ts     sendMail(): MAIL_PROVIDER=log (outbox, /dev/mail) | smtp (SMTP_URL, MAIL_FROM)
+src/lib/mail/templates.ts  German/English mails (plain text + simple HTML, all values escaped)
+src/lib/billing/reminders.ts  hosting-expiry reminders
+src/lib/jobs/daily.ts      runDailyJobs(): expired credits, stale holds, reminders
+```
+
+- **E-mail confirmation.** Signing up sends a confirmation link (valid 24 h); there is no session until it is opened.
+  The link signs the user in and leads to `/email-verified`. Signing in with an unconfirmed address sends a new link.
+- **Password reset.** `/forgot-password` always answers the same, whether or not an account exists, and mails are
+  sent in the background so response times do not reveal it either. The link (valid 1 h, single use) leads to
+  `/reset-password`; setting a new password signs the user out on all devices.
+- **Language.** Auth mails use the language of the current page; the user's language is also stored (`user.locale`,
+  set at sign-up and by the language switch) for mails sent without a request, such as reminders.
+- **Hosting reminders** for published sites: 14 days and 3 days before the hosting period ends, when it has ended
+  (with the date the site goes offline) and when it went offline. Only the stage that applies today is sent, and each
+  stage once per hosting period (unique index on app, stage and `hosted_until`) – a renewal starts a new cycle.
+  If sending fails, the reminder is retried on the next run.
+- **Daily job.** `npm run jobs:daily` (e.g. a scheduled task in Coolify) or `POST /api/cron/daily` with
+  `Authorization: Bearer $CRON_SECRET`. Safe to run more than once a day.
+
 ## Developer tools
 
 Enabled with `ENABLE_DEV_TOOLS=true` – for local development and supervised demos only:
@@ -191,6 +216,9 @@ Enabled with `ENABLE_DEV_TOOLS=true` – for local development and supervised de
 - **`/dev`** – grant test credits, balances with a ledger check, unit economics (revenue vs. AI cost), recent purchases
 - **Simulated checkout** – buying credits or hosting opens `/dev/checkout/<id>`; "Simulate payment" runs the real fulfillment code
 - **CLI** – `npm run dev:grant-credits -- demo@example.test 1000 "Demo"`
+- **Mail outbox** – `/dev/mail` shows the e-mails `MAIL_PROVIDER=log` would have sent, with their links. It needs no login
+  (new accounts must confirm before they can sign in) and therefore only exists on the local development server,
+  never in a production build.
 - A **TEST MODE** banner is shown on every page while enabled.
 
 ## Testing
@@ -204,14 +232,15 @@ parallel reservations, expiry order, stale holds, refunds on failed AI calls and
 hosting states, patch safety (unsafe links, immutable ids), upload validation and metadata stripping, storage path
 safety, reference-URL validation, and the Claude provider against a scripted fake API (strict schemas, the
 patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, usage and fallback pricing), Stripe
-Checkout and signed webhooks (replays, amount/currency mismatches, delayed payments, expiry, return page), and free
-preview quotas (parallel claims, per-network, global and budget limits, IP hash retention). No API keys are needed. CI runs the same suite against PostgreSQL on every push and pull request.
+Checkout and signed webhooks (replays, amount/currency mismatches, delayed payments, expiry, return page), free
+preview quotas (parallel claims, per-network, global and budget limits, IP hash retention), the sign-up, confirmation
+and password-reset flows through Better Auth, hosting reminders and the daily-job endpoint. No API keys are needed. CI runs the same suite against PostgreSQL on every push and pull request.
 
 ## Production readiness checklist
 
 - [ ] Real Impressum and privacy policy for the platform (`src/app/impressum`, `src/app/datenschutz`)
 - [ ] Terms of service and data processing agreement (AVV/DPA) linked at sign-up
-- [ ] E-mail verification and password reset (Better Auth `sendVerificationEmail`)
+- [ ] `MAIL_PROVIDER=smtp` with an EU mail provider; SPF, DKIM and DMARC for the sender domain
 - [ ] Production values for `ROOT_DOMAIN`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, `DATABASE_URL`
 - [ ] Wildcard DNS `*.your-domain` and a wildcard TLS certificate
 - [ ] Automated, encrypted, off-site backups of the database and media storage
@@ -219,5 +248,5 @@ preview quotas (parallel claims, per-network, global and budget limits, IP hash 
 - [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, `PAYMENT_PROVIDER=stripe` with live keys, real `MEDIA_STORAGE`
 - [ ] Stripe: webhook endpoint registered (events above), payment methods, business details; decide on VAT/Stripe Tax and invoices; refund handling
 - [ ] `TRUST_PROXY_HOPS` matches the proxy setup, so per-network free-preview limits see the real client IP
-- [ ] Stripe and Anthropic as processors in the privacy policy and DPA list (payment data; briefs, site texts and fetched reference pages)
-- [ ] Scheduled job for `sweepExpired()` (expired credits, stale holds), hosting-expiry reminder e-mails and cleanup of unused media files
+- [ ] Stripe, Anthropic and the mail provider as processors in the privacy policy and DPA list
+- [ ] `npm run jobs:daily` scheduled once a day (or `CRON_SECRET` + an external scheduler); cleanup of unused media files

@@ -2,13 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SettingsMenu } from "@/components/SettingsMenu";
 import { getT } from "@/i18n/server";
-import { requireUser } from "@/lib/auth";
 import { devToolsEnabled } from "@/lib/dev-tools";
 
 // Everything under /dev only exists when ENABLE_DEV_TOOLS=true – otherwise it is a 404.
 export default async function DevLayout({ children }: LayoutProps<"/dev">) {
   if (!devToolsEnabled()) notFound();
-  await requireUser();
+  // Pages check the login themselves: the mail outbox must work before an account is confirmed.
   const t = await getT();
   return (
     <div className="flex flex-1 flex-col">

@@ -29,6 +29,13 @@
       "when": 1791908040874,
       "tag": "0003_free_previews",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791914276559,
+      "tag": "0004_email_and_reminders",
+      "breakpoints": true
     }
   ]
 }

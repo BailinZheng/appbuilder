@@ -1,12 +1,15 @@
 import { desc, eq, sql } from "drizzle-orm";
+import Link from "next/link";
 import { db, schema } from "@/db";
 import { formatDateTime, formatEur, formatUsd } from "@/i18n/format";
 import { getLocale, getT } from "@/i18n/server";
+import { requireUser } from "@/lib/auth";
 import { USD_TO_EUR } from "@/lib/billing/catalog";
 import { checkLedgerInvariant, getBalance } from "@/lib/billing/ledger";
 import { GrantForm } from "./grant-form";
 
 export default async function DevToolsPage() {
+  await requireUser();
   const [t, locale] = await Promise.all([getT(), getLocale()]);
   const d = t.dev;
 
@@ -42,7 +45,12 @@ export default async function DevToolsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{d.title}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{d.title}</h1>
+        {process.env.NODE_ENV !== "production" && (
+          <Link href="/dev/mail" className="rounded-lg border bg-white px-3 py-1.5 text-sm">📬 {d.mailLink}</Link>
+        )}
+      </div>
       <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
         <section className={card}>
           <h2 className="mb-3 font-semibold">{d.grantTitle}</h2>

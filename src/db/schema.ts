@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AppDefinition, LegalInfo } from "@/lib/app-definition";
 import type { SiteBrief } from "@/lib/ai/types";
 
@@ -13,6 +13,8 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  // Platform language for e-mails (Better Auth additional field, kept in sync with the language switch)
+  locale: text("locale").notNull().default("de"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -281,6 +283,22 @@ export const freePreviews = pgTable(
     index("free_previews_ip_idx").on(t.ipHash, t.createdAt),
     index("free_previews_created_idx").on(t.createdAt),
   ],
+);
+
+/** Hosting-expiry e-mails already sent. One row per app, reminder kind and hosting period, so every
+ * reminder goes out once – and a renewed period (new hosted_until) starts a new cycle. */
+export const hostingReminders = pgTable(
+  "hosting_reminders",
+  {
+    id: text("id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"expires_soon" | "expires_3d" | "expired" | "offline">().notNull(),
+    hostedUntil: timestamp("hosted_until").notNull(),
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("hosting_reminders_once_idx").on(t.appId, t.kind, t.hostedUntil)],
 );
 
 export type CreditSource = "purchase" | "subscription" | "promo" | "test";

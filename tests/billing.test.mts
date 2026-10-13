@@ -59,7 +59,7 @@ before(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    sql`TRUNCATE free_previews, media, ai_usage, credit_transactions, credit_holds, credit_lots, purchases, app_versions, submissions, apps, session, account, "user"`,
+    sql`TRUNCATE hosting_reminders, free_previews, media, ai_usage, credit_transactions, credit_holds, credit_lots, purchases, app_versions, submissions, apps, session, account, "user"`,
   );
 });
 

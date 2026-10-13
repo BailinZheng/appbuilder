@@ -34,6 +34,7 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 - 📱 **Installable PWA** for every site – own subdomain, generated icon, web manifest and offline support
 - ⚖️ **German legal basics built in** – required Impressum before publishing, privacy-policy template, consent on contact forms
 - 🌍 **German & English UI**, switchable at any time (German is the default)
+- ✉️ **Accounts done properly** – e-mail confirmation, password reset and hosting-expiry reminders in the customer's language
 
 **Under the hood**
 
@@ -41,10 +42,10 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 - 💳 **Pay-as-you-go credit ledger** – reserve → capture/release in a single transaction, row-locked against double spending, expiring credit lots, append-only history and a verified ledger invariant
 - 💶 **Stripe Checkout** with signed webhooks – amount and currency verified against the order, idempotent fulfilment, delayed methods such as SEPA direct debit
 - 🎁 **Free AI preview with abuse protection** – per-user, per-network and global daily limits plus a daily cost budget, checked atomically; only keyed IP hashes are stored, for two days
-- 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted
+- 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted; reminders 14 and 3 days before, at expiry and when offline – each exactly once
 - 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations for local work, real ones without redesign
 - 🛡️ **Security-minded** – tenant isolation on every query, XSS-safe link validation, content-based upload type detection, SSRF-safe reference URLs, security headers
-- ✅ **Tested** – 53 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, webhooks, quotas, upload safety …) and CI on every push – no API keys needed
+- ✅ **Tested** – 64 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, webhooks, quotas, sign-up and password reset flows, upload safety …) and CI on every push – no API keys needed
 
 ## Screenshots
 
@@ -104,8 +105,10 @@ npm run dev
 | http://localhost:3000 | Platform: sign up, dashboard, editor |
 | `http://<slug>.localhost:3000` | A published customer site (also at `/s/<slug>`) |
 | http://localhost:3000/dev | Developer tools: grant test credits, unit economics (when `ENABLE_DEV_TOOLS=true`) |
+| http://localhost:3000/dev/mail | Mail outbox: e-mails are not sent locally but shown here (confirmation and reset links) |
 
-To try the full flow: sign up, grant yourself test credits on `/dev`, then use **Create with AI** on the dashboard.
+To try the full flow: sign up, open the confirmation link on `/dev/mail`, then use **Create with AI** on the dashboard
+(your first site is free; grant yourself test credits on `/dev` for more).
 
 <details>
 <summary><b>Configuration (.env)</b></summary>
@@ -124,6 +127,9 @@ To try the full flow: sign up, grant yourself test credits on `/dev`, then use *
 | `PAYMENT_PROVIDER` | no | `dev` (simulated checkout, default) or `stripe` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | with `stripe` | Secret key (`sk_test_…` / `sk_live_…`) and the signing secret of the webhook endpoint `/api/stripe/webhook` |
 | `FREE_PREVIEW_DAILY_LIMIT` / `FREE_PREVIEW_DAILY_BUDGET_USD` | no | Global caps for free AI previews per 24 h (default 200 / 25 USD); `0` switches them off |
+| `MAIL_PROVIDER` | in production | `log` (default with dev tools: mails go to `/dev/mail`) or `smtp` |
+| `SMTP_URL` / `MAIL_FROM` | with `smtp` | e.g. `smtps://user:password@smtp-relay.brevo.com:465` and `AppBuilder <noreply@your-domain>` |
+| `CRON_SECRET` | no | Enables `POST /api/cron/daily` for an external scheduler (alternative to `npm run jobs:daily`) |
 | `TRUST_PROXY_HOPS` | no | Reverse proxies in front of the app, for the client IP used by abuse limits (default `1`, `0` = none) |
 | `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default). S3-compatible storage is planned. |
 | `MOCK_AI_LATENCY_MS` | no | Simulated AI response time for the mock provider |
@@ -203,7 +209,7 @@ tests/                   automated tests
 - [x] Claude integration (structured output, strict patch tools, prompt caching, web fetch for reference sites)
 - [x] Stripe Checkout and webhooks
 - [x] Free AI preview with quotas and abuse protection
-- [ ] E-mail verification, password reset and hosting-expiry reminders
+- [x] E-mail verification, password reset and hosting-expiry reminders
 - [ ] S3-compatible media storage and cleanup of unused files
 - [ ] Per-site language setting for customer sites
 - [ ] PostgreSQL row-level security as a second layer of tenant isolation
