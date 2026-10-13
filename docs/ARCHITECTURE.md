@@ -47,8 +47,10 @@ src/lib/billing/
   catalog.ts          prices, credit packs, hosting passes – the only place prices live (PRICE_LIST_VERSION)
   ledger.ts           credit lots, reserve → capture | release, expiry, history, invariant check
   billed-action.ts    runBilledAction(): reserve → compute (AI) → charge + save result in ONE transaction
-  purchases.ts        createPurchase / fulfillPurchase – idempotent, shared by dev checkout and future webhooks
-  payment-provider.ts PaymentProvider interface ("dev" = simulated checkout, "stripe" = planned)
+  purchases.ts        createPurchase / fulfillPurchase – idempotent, shared by the Stripe webhook and dev checkout
+  payment-provider.ts PaymentProvider interface ("dev" = simulated checkout, "stripe" = Stripe Checkout)
+  stripe.ts           Checkout Sessions, webhook event handling, session ↔ purchase verification
+  free-preview.ts     runFreePreview(): quota check → compute (AI) → save result, for a user's free first site
   hosting.ts          hosting status: active → 14-day grace → lapsed (offline, never deleted)
 ```
 
@@ -64,6 +66,41 @@ src/lib/billing/
 - **Metered actions.** Free-form AI instructions are billed by measured token cost × markup, clamped to an
   advertised range; the maximum is reserved up front.
 - **Free undo.** Every AI change snapshots the previous version in `app_versions`.
+
+### Stripe Checkout
+
+`PAYMENT_PROVIDER=stripe` with `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
+
+- **Checkout.** Buying creates a pending purchase, then a Checkout Session priced from that purchase row
+  (`price_data`, so no products have to be set up in Stripe), with the purchase id as `client_reference_id`, the
+  session id stored as `provider_ref`, an idempotency key per purchase, and a 1-hour expiry. Payment methods come
+  from the Stripe dashboard (cards, SEPA direct debit, PayPal …).
+- **Webhook** `POST /api/stripe/webhook` – subscribe to `checkout.session.completed`,
+  `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` and
+  `checkout.session.expired`. The raw body is verified against the `Stripe-Signature` header. A session is only
+  fulfilled when it is paid **and** matches its purchase (id, session id, amount, currency); delayed methods wait for
+  `async_payment_succeeded`; failed or expired sessions cancel the purchase. Only errors a retry can fix return 500.
+- **Return page.** `/dashboard/billing?checkout=success&session_id=…` retrieves the session and fulfils it at once
+  (for the buyer only), so credits appear without waiting for the webhook. Webhook and return page can both run –
+  `fulfillPurchase` grants exactly once.
+- Not handled automatically yet: refunds and disputes (credits are not taken back), invoices and Stripe Tax.
+
+### Free AI preview
+
+A user's first "Create with AI" is free. `runFreePreview` mirrors `runBilledAction` without credits: it claims a slot,
+runs the AI, then records the AI usage (`credits_charged = 0`) and saves the site in one transaction.
+
+- **Limits** (`freePreviewLimits()` in `catalog.ts`): 1 per user, 3 per network per 24 h, 200 per 24 h overall and a
+  daily AI cost budget of 25 USD (running previews count with an estimate). The global values can be lowered with
+  `FREE_PREVIEW_DAILY_LIMIT` / `FREE_PREVIEW_DAILY_BUDGET_USD`; `0` switches free previews off.
+- **Atomic.** Limits are checked and the attempt recorded under a PostgreSQL advisory lock, so parallel requests cannot
+  slip past them. A failed AI call does not use up the user's preview but still counts towards the network and global
+  limits, so failures cannot be used to hammer the AI.
+- **Abuse protection.** Accounts are free and not yet e-mail-verified, so the per-network and global limits are what
+  cap the cost. The client IP is the entry the reverse proxy appended to `X-Forwarded-For` (`TRUST_PROXY_HOPS`);
+  IPv6 addresses count per /64. A honeypot form field turns simple bots away; Better Auth rate-limits sign-ups.
+- **Privacy.** Only an HMAC of the network (keyed with `BETTER_AUTH_SECRET`) is stored, and it is deleted after two
+  days. Without a known client IP, the per-network limit does not apply – the global limits still do.
 
 ## AI layer
 
@@ -118,7 +155,6 @@ src/lib/ai/
 
 | Stand-in | Replace with | What to implement |
 |---|---|---|
-| `PAYMENT_PROVIDER=dev` | `stripe` | `startCheckout` → Stripe Checkout Session; a webhook route calls `fulfillPurchase(purchaseId, sessionId)` |
 | `MEDIA_STORAGE=local` | `s3` | `MediaStorage` for S3-compatible object storage (e.g. an EU region) |
 
 Ledger, prices, server actions, UI and tests stay unchanged.
@@ -167,7 +203,9 @@ Tests run with the Node.js test runner against `TEST_DATABASE_URL` (never the de
 parallel reservations, expiry order, stale holds, refunds on failed AI calls and failed saves, idempotent purchases,
 hosting states, patch safety (unsafe links, immutable ids), upload validation and metadata stripping, storage path
 safety, reference-URL validation, and the Claude provider against a scripted fake API (strict schemas, the
-patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, usage and fallback pricing). CI runs the same suite against PostgreSQL on every push and pull request.
+patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, usage and fallback pricing), Stripe
+Checkout and signed webhooks (replays, amount/currency mismatches, delayed payments, expiry, return page), and free
+preview quotas (parallel claims, per-network, global and budget limits, IP hash retention). No API keys are needed. CI runs the same suite against PostgreSQL on every push and pull request.
 
 ## Production readiness checklist
 
@@ -178,6 +216,8 @@ patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, u
 - [ ] Wildcard DNS `*.your-domain` and a wildcard TLS certificate
 - [ ] Automated, encrypted, off-site backups of the database and media storage
 - [ ] PostgreSQL row-level security
-- [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, real `PAYMENT_PROVIDER` and `MEDIA_STORAGE`
-- [ ] Anthropic as a sub-processor in the privacy policy and DPA list (briefs, site texts and fetched reference pages are sent to the Claude API)
+- [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, `PAYMENT_PROVIDER=stripe` with live keys, real `MEDIA_STORAGE`
+- [ ] Stripe: webhook endpoint registered (events above), payment methods, business details; decide on VAT/Stripe Tax and invoices; refund handling
+- [ ] `TRUST_PROXY_HOPS` matches the proxy setup, so per-network free-preview limits see the real client IP
+- [ ] Stripe and Anthropic as processors in the privacy policy and DPA list (payment data; briefs, site texts and fetched reference pages)
 - [ ] Scheduled job for `sweepExpired()` (expired credits, stale holds), hosting-expiry reminder e-mails and cleanup of unused media files

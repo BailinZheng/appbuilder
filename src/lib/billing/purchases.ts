@@ -6,7 +6,7 @@ import { addMonths, getProduct, PURCHASED_CREDIT_VALIDITY_MONTHS } from "./catal
 import { grantCredits } from "./ledger";
 
 // Purchases are created before payment ("pending") and fulfilled exactly once when the payment
-// provider confirms them: today by the simulated dev checkout, later by the Stripe webhook.
+// provider confirms them: by the Stripe webhook (or the return from Checkout), or by the simulated dev checkout.
 
 const { purchases, apps } = schema;
 
@@ -90,6 +90,22 @@ export async function fulfillPurchase(purchaseId: string, providerRef?: string) 
       .returning();
     return { purchase: paid, alreadyFulfilled: false };
   });
+}
+
+/** Links a pending purchase to the provider's checkout (e.g. the Stripe Checkout Session id). */
+export async function setProviderRef(purchaseId: string, providerRef: string) {
+  await db
+    .update(purchases)
+    .set({ providerRef })
+    .where(and(eq(purchases.id, purchaseId), eq(purchases.status, "pending")));
+}
+
+/** Cancels a still-pending purchase on behalf of the payment provider (expired or failed payment). */
+export async function expirePurchase(purchaseId: string) {
+  await db
+    .update(purchases)
+    .set({ status: "cancelled" })
+    .where(and(eq(purchases.id, purchaseId), eq(purchases.status, "pending")));
 }
 
 export async function cancelPurchase(purchaseId: string, userId: string) {

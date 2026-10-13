@@ -257,6 +257,32 @@ export const aiUsage = pgTable(
   (t) => [index("ai_usage_user_idx").on(t.userId, t.createdAt)],
 );
 
+/**
+ * Free AI previews (a user's first generated site). Every attempt is a row, so quotas can be checked
+ * per user, per IP and globally. `ip_hash` is a keyed hash, never the address, and is cleared after
+ * two days because it is only needed for the daily per-IP limit.
+ */
+export const freePreviews = pgTable(
+  "free_previews",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    appId: text("app_id").references(() => apps.id, { onDelete: "set null" }),
+    ipHash: text("ip_hash"),
+    status: text("status").$type<"pending" | "succeeded" | "failed">().notNull().default("pending"),
+    costMicroUsd: bigint("cost_micro_usd", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    settledAt: timestamp("settled_at"),
+  },
+  (t) => [
+    index("free_previews_user_idx").on(t.userId),
+    index("free_previews_ip_idx").on(t.ipHash, t.createdAt),
+    index("free_previews_created_idx").on(t.createdAt),
+  ],
+);
+
 export type CreditSource = "purchase" | "subscription" | "promo" | "test";
 
 /**

@@ -26,6 +26,25 @@ export const USD_TO_EUR = 0.92;
 
 export type BilledAction = FixedAction | "instruction";
 
+/**
+ * Free AI preview: a user's first "Create with AI" costs no credits. Limits protect against abuse
+ * (accounts are free to create, so the per-IP and global limits are what really caps the cost).
+ * The global values can be lowered via env without a code change; 0 switches free previews off.
+ */
+export function freePreviewLimits() {
+  const env = (name: string, fallback: number) => {
+    const v = Number(process.env[name]);
+    return process.env[name] !== undefined && Number.isFinite(v) && v >= 0 ? v : fallback;
+  };
+  return {
+    perUser: 1, // lifetime
+    perIpPerDay: 3, // rolling 24 hours, IPv6 counted per /64 network
+    globalPerDay: env("FREE_PREVIEW_DAILY_LIMIT", 200),
+    dailyBudgetUsd: env("FREE_PREVIEW_DAILY_BUDGET_USD", 25), // AI cost of all free previews, rolling 24 hours
+    estimatedCostUsd: 0.3, // counted for previews that are still running
+  };
+}
+
 /** Held credits are released automatically if an action never finishes (crash, timeout). */
 export const HOLD_TTL_MINUTES = 15;
 

@@ -152,6 +152,10 @@ const de = {
     months: (n: number) => (n === 1 ? "1 Monat" : `${n} Monate`),
     noApps: "Erstellen Sie zuerst eine App.",
     purchaseError: "Der Kauf konnte nicht gestartet werden.",
+    checkoutPaid: "Vielen Dank! Ihre Zahlung ist eingegangen und wurde gutgeschrieben.",
+    checkoutProcessing:
+      "Vielen Dank! Ihre Zahlung wird noch bestätigt (bei Lastschrift kann das einige Tage dauern). Die Gutschrift erfolgt automatisch.",
+    checkoutCancelled: "Der Kauf wurde abgebrochen – es wurde nichts berechnet.",
     sources: { purchase: "Kauf", subscription: "Abo", promo: "Aktion", test: "Test-Credits" } as Record<string, string>,
     actions: {
       generate_site: "Website mit KI erstellt",
@@ -199,6 +203,13 @@ const de = {
     invalidUrl: "Bitte geben Sie eine gültige Web-Adresse ein (z. B. ihre-firma.de).",
     generate: (n: number) => `Website erstellen · ${n} Credits`,
     generating: "Die KI erstellt Ihre Website …",
+    generateFree: "Website kostenlos erstellen",
+    freePreviewNote: "Ihre erste KI-Website ist gratis – ganz ohne Credits. Weitere KI-Änderungen kosten Credits.",
+    freePreviewUsed: "Ihre kostenlose KI-Website haben Sie bereits erstellt. Weitere Websites kosten Credits.",
+    freePreviewIpLimit:
+      "Von Ihrem Netzwerk wurden heute schon mehrere kostenlose Websites erstellt. Bitte versuchen Sie es morgen wieder oder nutzen Sie Credits.",
+    freePreviewUnavailable:
+      "Kostenlose KI-Websites sind gerade nicht verfügbar. Bitte versuchen Sie es später wieder oder nutzen Sie Credits.",
     working: "Die KI arbeitet …",
     credits: (n: number) => `${n} Credits`,
     maxCredits: (n: number) => `max. ${n} Credits`,
@@ -425,6 +436,10 @@ const en: Dictionary = {
     months: (n: number) => (n === 1 ? "1 month" : `${n} months`),
     noApps: "Create an app first.",
     purchaseError: "The purchase could not be started.",
+    checkoutPaid: "Thank you! Your payment has been received and credited.",
+    checkoutProcessing:
+      "Thank you! Your payment is still being confirmed (direct debit can take a few days). It will be credited automatically.",
+    checkoutCancelled: "The purchase was cancelled – nothing was charged.",
     sources: { purchase: "Purchase", subscription: "Subscription", promo: "Promotion", test: "Test credits" },
     actions: {
       generate_site: "Website created with AI",
@@ -472,6 +487,12 @@ const en: Dictionary = {
     invalidUrl: "Please enter a valid web address (e.g. your-company.com).",
     generate: (n: number) => `Create website · ${n} credits`,
     generating: "The AI is creating your website …",
+    generateFree: "Create website for free",
+    freePreviewNote: "Your first AI website is free – no credits needed. Further AI changes cost credits.",
+    freePreviewUsed: "You have already created your free AI website. Further websites cost credits.",
+    freePreviewIpLimit:
+      "Several free websites have already been created from your network today. Please try again tomorrow or use credits.",
+    freePreviewUnavailable: "Free AI websites are not available right now. Please try again later or use credits.",
     working: "The AI is working …",
     credits: (n: number) => `${n} credits`,
     maxCredits: (n: number) => `max. ${n} credits`,

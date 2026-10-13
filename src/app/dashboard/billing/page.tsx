@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { db, schema } from "@/db";
 import { getLocale, getT } from "@/i18n/server";
 import { formatDate, formatDateTime, formatEur } from "@/i18n/format";
@@ -6,11 +7,23 @@ import { requireUser } from "@/lib/auth";
 import { ACTION_PRICES, CREDIT_PACKS, HOSTING_PASSES, METERED_INSTRUCTION } from "@/lib/billing/catalog";
 import { hostingStatus } from "@/lib/billing/hosting";
 import { getActiveLots, getBalance, getHistory, sweepExpired } from "@/lib/billing/ledger";
+import { getStripe, syncCheckoutSession } from "@/lib/billing/stripe";
 import { startCheckoutAction } from "./actions";
 
 export default async function BillingPage({ searchParams }: PageProps<"/dashboard/billing">) {
   const user = await requireUser();
-  const [t, locale, { error, app: preselectedApp }] = await Promise.all([getT(), getLocale(), searchParams]);
+  const [t, locale, { error, app: preselectedApp, checkout, session_id }] = await Promise.all([getT(), getLocale(), searchParams]);
+  if (checkout === "success" && typeof session_id === "string" && process.env.PAYMENT_PROVIDER === "stripe") {
+    // Back from Stripe Checkout: confirm the payment now instead of waiting for the webhook.
+    let paid = false;
+    try {
+      const outcome = await syncCheckoutSession(getStripe(), session_id, user.id);
+      paid = outcome === "fulfilled" || outcome === "alreadyFulfilled";
+    } catch (e) {
+      console.error("[billing] checkout sync failed", e); // the webhook will still fulfil it
+    }
+    if (paid) redirect("/dashboard/billing?checkout=paid"); // fresh render incl. header balance, clean URL
+  }
   await sweepExpired(user.id);
   const [balance, lots, history, apps] = await Promise.all([
     getBalance(user.id),
@@ -42,6 +55,11 @@ export default async function BillingPage({ searchParams }: PageProps<"/dashboar
         </div>
       </div>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{b.purchaseError}</p>}
+      {checkout === "paid" && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800" role="status">{b.checkoutPaid}</p>}
+      {checkout === "success" && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">{b.checkoutProcessing}</p>
+      )}
+      {checkout === "cancelled" && <p className="rounded-lg bg-zinc-100 p-3 text-sm text-zinc-700">{b.checkoutCancelled}</p>}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">

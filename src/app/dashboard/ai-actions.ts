@@ -3,6 +3,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -15,7 +16,9 @@ import { emptyLegal, slugError } from "@/lib/app-definition";
 import { requireUser } from "@/lib/auth";
 import { runBilledAction } from "@/lib/billing/billed-action";
 import { ACTION_PRICES, METERED_INSTRUCTION, type BilledAction } from "@/lib/billing/catalog";
-import { getBalance, InsufficientCreditsError } from "@/lib/billing/ledger";
+import { FreePreviewError, runFreePreview } from "@/lib/billing/free-preview";
+import { getBalance, InsufficientCreditsError, type Tx } from "@/lib/billing/ledger";
+import { clientIp, hashIp } from "@/lib/client-ip";
 
 // Error codes are returned (not texts) so the client shows them in the current language.
 export type AiError =
@@ -29,11 +32,21 @@ export type AiError =
         | "slugReserved"
         | "slugTaken"
         | "notFound"
+        | "freePreviewUsed"
+        | "freePreviewIpLimit"
+        | "freePreviewUnavailable"
         | "failed";
     };
 
+const FREE_PREVIEW_ERRORS = {
+  used: "freePreviewUsed",
+  ipLimit: "freePreviewIpLimit",
+  unavailable: "freePreviewUnavailable",
+} as const;
+
 function toAiError(e: unknown): AiError {
   if (e instanceof InsufficientCreditsError) return { code: "insufficient", required: e.required, available: e.available };
+  if (e instanceof FreePreviewError) return { code: FREE_PREVIEW_ERRORS[e.code] };
   console.error("[ai] action failed", e);
   return { code: "failed" };
 }
@@ -47,6 +60,9 @@ export type GenerateState = { error?: AiError };
 export async function generateSiteAction(_prev: GenerateState, formData: FormData): Promise<GenerateState> {
   const user = await requireUser();
   const locale = await getLocale();
+  // Honeypot: a field people never see. Bots that fill in every field are turned away quietly.
+  if (String(formData.get("website") ?? "") !== "") return { error: { code: "invalidBrief" } };
+  const free = formData.get("free") === "1";
   const brief = siteBriefSchema.safeParse(Object.fromEntries(formData));
   if (!brief.success) {
     const fields = brief.error.issues.map((i) => i.path[0]);
@@ -63,30 +79,38 @@ export async function generateSiteAction(_prev: GenerateState, formData: FormDat
 
   const ai = getAiProvider();
   const appId = nanoid();
-  try {
-    await runBilledAction({
-      userId: user.id,
-      action: "generate_site",
-      reserve: ACTION_PRICES.generate_site,
-      provider: ai.id,
-      compute: async () => {
-        const { output, usage } = await ai.generateSite(brief.data, locale);
-        applyPatches(output, []); // validates the generated site before anyone pays for it
-        return { output, usage, charge: ACTION_PRICES.generate_site };
-      },
-      commit: async (tx, site) => {
-        await tx.insert(schema.apps).values({
-          id: appId,
-          ownerId: user.id,
-          slug,
-          name: site.name,
-          themeColor: site.themeColor,
-          definition: site.definition,
-          aiBrief: brief.data,
-          legal: { ...emptyLegal, businessName: site.name, owner: user.name, email: user.email, phone: brief.data.phone },
-        });
-      },
+  const compute = async () => {
+    const { output, usage } = await ai.generateSite(brief.data, locale);
+    applyPatches(output, []); // validates the generated site before anyone pays for it
+    return { output, usage };
+  };
+  const commit = async (tx: Tx, site: SiteSnapshot) => {
+    await tx.insert(schema.apps).values({
+      id: appId,
+      ownerId: user.id,
+      slug,
+      name: site.name,
+      themeColor: site.themeColor,
+      definition: site.definition,
+      aiBrief: brief.data,
+      legal: { ...emptyLegal, businessName: site.name, owner: user.name, email: user.email, phone: brief.data.phone },
     });
+  };
+
+  try {
+    if (free) {
+      const ipHash = hashIp(clientIp(await headers()));
+      await runFreePreview({ userId: user.id, ipHash, appId, provider: ai.id, compute, commit });
+    } else {
+      await runBilledAction({
+        userId: user.id,
+        action: "generate_site",
+        reserve: ACTION_PRICES.generate_site,
+        provider: ai.id,
+        compute: async () => ({ ...(await compute()), charge: ACTION_PRICES.generate_site }),
+        commit,
+      });
+    }
   } catch (e) {
     return { error: toAiError(e) };
   }

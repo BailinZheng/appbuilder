@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { formatDate } from "@/i18n/format";
 import { getLocale, getT } from "@/i18n/server";
 import { requireUser } from "@/lib/auth";
+import { hasFreePreview } from "@/lib/billing/free-preview";
 import { hostingStatus } from "@/lib/billing/hosting";
 import { getBalance } from "@/lib/billing/ledger";
 import { appUrl } from "@/lib/urls";
@@ -12,7 +13,7 @@ import { GenerateForm } from "./generate-form";
 
 export default async function Dashboard() {
   const user = await requireUser();
-  const [t, locale, balance] = await Promise.all([getT(), getLocale(), getBalance(user.id)]);
+  const [t, locale, balance, freePreview] = await Promise.all([getT(), getLocale(), getBalance(user.id), hasFreePreview(user.id)]);
   const apps = await db
     .select()
     .from(schema.apps)
@@ -62,7 +63,7 @@ export default async function Dashboard() {
       <aside className="space-y-6">
         <div className="rounded-xl border border-violet-200 bg-white p-5 shadow-sm">
           <h2 className="mb-2 font-semibold">✨ {t.ai.generateTitle}</h2>
-          <GenerateForm balance={balance} />
+          <GenerateForm balance={balance} freePreview={freePreview} />
         </div>
         <div className="rounded-xl border bg-white p-5">
           <h2 className="mb-3 font-semibold">{t.dashboard.newApp}</h2>

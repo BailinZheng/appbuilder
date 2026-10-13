@@ -50,6 +50,7 @@ export async function simulatePaymentAction(purchaseId: string) {
     .from(schema.purchases)
     .where(and(eq(schema.purchases.id, purchaseId), eq(schema.purchases.userId, user.id)));
   if (!p) throw new Error("Purchase not found");
+  if (p.provider !== "dev") throw new Error("Only simulated purchases can be paid here");
   await fulfillPurchase(p.id, `dev_${nanoid()}`);
   revalidatePath("/dashboard", "layout");
   redirect(p.appId ? `/dashboard/billing?app=${p.appId}#hosting-${p.appId}` : "/dashboard/billing");

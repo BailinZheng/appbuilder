@@ -22,6 +22,13 @@
       "when": 1791036187824,
       "tag": "0002_media_and_ai_brief",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791908040874,
+      "tag": "0003_free_previews",
+      "breakpoints": true
     }
   ]
 }

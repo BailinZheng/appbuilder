@@ -20,14 +20,14 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 ---
 
 > **Status: early development (pre-alpha).** The full product flow works end to end locally. AI runs on Claude
-> (`AI_PROVIDER=anthropic`) or on a deterministic mock that needs no API key; payments are still a simulated checkout
-> behind a production-ready interface – see [Roadmap](#roadmap).
+> (`AI_PROVIDER=anthropic`) or on a deterministic mock that needs no API key; payments run on Stripe Checkout
+> (`PAYMENT_PROVIDER=stripe`) or on a simulated checkout for local work – see [Roadmap](#roadmap).
 
 ## Features
 
 **For business owners**
 
-- ✨ **Create with AI** – a short guided form (business, industry, services, tone, optional reference websites) produces a complete site
+- ✨ **Create with AI** – a short guided form (business, industry, services, tone, optional reference websites) produces a complete site; **the first one is free**
 - 💬 **Edit with AI** – one-click redesigns, new sections, text rewrites or free-form instructions; every AI change can be **undone for free**
 - 🧩 **Block editor** – header, text, images, buttons, opening hours and contact forms with a live phone preview
 - 🖼️ **Drag & drop images** – automatically resized, converted to WebP and stripped of metadata such as GPS location
@@ -39,10 +39,12 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 
 - 🏢 **Multi-tenant by design** – one codebase serves the platform and all customer sites (`<slug>.your-domain`)
 - 💳 **Pay-as-you-go credit ledger** – reserve → capture/release in a single transaction, row-locked against double spending, expiring credit lots, append-only history and a verified ledger invariant
+- 💶 **Stripe Checkout** with signed webhooks – amount and currency verified against the order, idempotent fulfilment, delayed methods such as SEPA direct debit
+- 🎁 **Free AI preview with abuse protection** – per-user, per-network and global daily limits plus a daily cost budget, checked atomically; only keyed IP hashes are stored, for two days
 - 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted
 - 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations for local work, real ones without redesign
 - 🛡️ **Security-minded** – tenant isolation on every query, XSS-safe link validation, content-based upload type detection, SSRF-safe reference URLs, security headers
-- ✅ **Tested** – 29 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, upload safety …) and CI on every push
+- ✅ **Tested** – 53 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, webhooks, quotas, upload safety …) and CI on every push – no API keys needed
 
 ## Screenshots
 
@@ -119,7 +121,10 @@ To try the full flow: sign up, grant yourself test credits on `/dev`, then use *
 | `AI_PROVIDER` | no | `mock` (default, no API key needed) or `anthropic` (Claude) |
 | `ANTHROPIC_API_KEY` | with `anthropic` | API key from the Claude Console |
 | `ANTHROPIC_MODEL` | no | `claude-opus-5-5` (default) or `claude-sonnet-5-5` |
-| `PAYMENT_PROVIDER` | no | `dev` (simulated checkout, default). `stripe` is planned. |
+| `PAYMENT_PROVIDER` | no | `dev` (simulated checkout, default) or `stripe` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | with `stripe` | Secret key (`sk_test_…` / `sk_live_…`) and the signing secret of the webhook endpoint `/api/stripe/webhook` |
+| `FREE_PREVIEW_DAILY_LIMIT` / `FREE_PREVIEW_DAILY_BUDGET_USD` | no | Global caps for free AI previews per 24 h (default 200 / 25 USD); `0` switches them off |
+| `TRUST_PROXY_HOPS` | no | Reverse proxies in front of the app, for the client IP used by abuse limits (default `1`, `0` = none) |
 | `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default). S3-compatible storage is planned. |
 | `MOCK_AI_LATENCY_MS` | no | Simulated AI response time for the mock provider |
 
@@ -149,7 +154,7 @@ flowchart LR
     Billing --> DB[(PostgreSQL)]
     App --> DB
     AI -. "Claude<br/>or mock" .-> Model["AI model"]
-    Billing -. "simulated today<br/>Stripe planned" .-> Pay["Payments"]
+    Billing -. "Stripe<br/>or simulated" .-> Pay["Payments"]
     Media --> Files[("File storage<br/>local · S3 planned")]
 ```
 
@@ -196,8 +201,8 @@ tests/                   automated tests
 - [x] AI actions behind a provider interface (mock implementation)
 - [x] Drag & drop image uploads with privacy-preserving processing
 - [x] Claude integration (structured output, strict patch tools, prompt caching, web fetch for reference sites)
-- [ ] Stripe Checkout and webhooks
-- [ ] Free AI preview with quotas and abuse protection
+- [x] Stripe Checkout and webhooks
+- [x] Free AI preview with quotas and abuse protection
 - [ ] E-mail verification, password reset and hosting-expiry reminders
 - [ ] S3-compatible media storage and cleanup of unused files
 - [ ] Per-site language setting for customer sites

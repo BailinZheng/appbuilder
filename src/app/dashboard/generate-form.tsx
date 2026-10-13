@@ -25,6 +25,10 @@ export function aiErrorText(t: Dictionary, e: AiError) {
       return t.dashboard.errors[e.code];
     case "notFound":
       return t.editor.errors.notFound;
+    case "freePreviewUsed":
+    case "freePreviewIpLimit":
+    case "freePreviewUnavailable":
+      return t.ai[e.code];
     case "failed":
       return t.ai.failed;
   }
@@ -76,9 +80,12 @@ function ReferenceUrlField({ name, label, hint, serverError }: { name: string; l
   );
 }
 
-export function GenerateForm({ balance }: { balance: number }) {
+/** `freePreview`: the user still has their free first site (the server re-checks every limit). */
+export function GenerateForm({ balance, freePreview }: { balance: number; freePreview: boolean }) {
   const { t } = useI18n();
   const [state, action, pending] = useActionState<GenerateState, FormData>(generateSiteAction, {});
+  // If the free preview is refused, the next attempt uses credits instead.
+  const free = freePreview && !state.error?.code.startsWith("freePreview");
   const [slug, setSlug] = useState("");
   const [touched, setTouched] = useState(false);
   const price = ACTION_PRICES.generate_site;
@@ -89,6 +96,14 @@ export function GenerateForm({ balance }: { balance: number }) {
   return (
     <form action={action} className="space-y-3">
       <p className="text-sm text-zinc-600">{t.ai.generateIntro}</p>
+      {free && (
+        <p className="rounded-lg bg-green-50 p-2.5 text-xs text-green-800">
+          <input type="hidden" name="free" value="1" />
+          🎁 {t.ai.freePreviewNote}
+        </p>
+      )}
+      {/* Honeypot for bots – hidden from people and assistive technology */}
+      <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" defaultValue="" />
       <label className={label}>
         <span className={caption}>{t.ai.businessName}</span>
         <input
@@ -173,7 +188,7 @@ export function GenerateForm({ balance }: { balance: number }) {
         disabled={pending}
         className="w-full rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 py-2.5 text-sm font-medium text-white disabled:opacity-60"
       >
-        {pending ? t.ai.generating : `✨ ${t.ai.generate(price)}`}
+        {pending ? t.ai.generating : free ? `✨ ${t.ai.generateFree}` : `✨ ${t.ai.generate(price)}`}
       </button>
       <p className="text-center text-xs text-zinc-500">
         {t.billing.balance}: {t.billing.credits(balance)}
