@@ -30,7 +30,7 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 - ✨ **Create with AI** – a short guided form (business, industry, services, tone, optional reference websites) produces a complete site; **the first one is free**
 - 💬 **Edit with AI** – one-click redesigns, new sections, text rewrites or free-form instructions; every AI change can be **undone for free**
 - 🧩 **Block editor** – header, text, images, buttons, opening hours and contact forms with a live phone preview
-- 🖼️ **Drag & drop images** – automatically resized, converted to WebP and stripped of metadata such as GPS location
+- 🖼️ **Drag & drop images** – automatically resized, converted to WebP and stripped of metadata such as GPS location; unused images are cleaned up automatically
 - 📱 **Installable PWA** for every site – own subdomain, generated icon, web manifest and offline support
 - ⚖️ **German legal basics built in** – required Impressum before publishing, privacy-policy template, consent on contact forms
 - 🌍 **German & English UI**, switchable at any time (German is the default)
@@ -43,9 +43,9 @@ refine it by chatting with an AI, and publish it on their own subdomain – GDPR
 - 💶 **Stripe Checkout** with signed webhooks – amount and currency verified against the order, idempotent fulfilment, delayed methods such as SEPA direct debit
 - 🎁 **Free AI preview with abuse protection** – per-user, per-network and global daily limits plus a daily cost budget, checked atomically; only keyed IP hashes are stored, for two days
 - 🏠 **Hosting passes** without subscriptions – 14-day grace period, sites go offline but are never deleted; reminders 14 and 3 days before, at expiry and when offline – each exactly once
-- 🔌 **Swappable providers** for AI, payments and file storage – mock/dev implementations for local work, real ones without redesign
+- 🔌 **Swappable providers** for AI, payments and file storage (local disk or any S3-compatible bucket, signed with SigV4 and no SDK) – mock/dev implementations for local work, real ones without redesign
 - 🛡️ **Security-minded** – tenant isolation on every query, XSS-safe link validation, content-based upload type detection, SSRF-safe reference URLs, security headers
-- ✅ **Tested** – 64 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, webhooks, quotas, sign-up and password reset flows, upload safety …) and CI on every push – no API keys needed
+- ✅ **Tested** – 77 automated tests on a real PostgreSQL (concurrency, refunds, idempotency, webhooks, quotas, sign-up and password reset flows, upload safety, S3 signing, media cleanup …) and CI on every push – no API keys needed
 
 ## Screenshots
 
@@ -131,7 +131,10 @@ To try the full flow: sign up, open the confirmation link on `/dev/mail`, then u
 | `SMTP_URL` / `MAIL_FROM` | with `smtp` | e.g. `smtps://user:password@smtp-relay.brevo.com:465` and `AppBuilder <noreply@your-domain>` |
 | `CRON_SECRET` | no | Enables `POST /api/cron/daily` for an external scheduler (alternative to `npm run jobs:daily`) |
 | `TRUST_PROXY_HOPS` | no | Reverse proxies in front of the app, for the client IP used by abuse limits (default `1`, `0` = none) |
-| `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default). S3-compatible storage is planned. |
+| `MEDIA_STORAGE` / `MEDIA_DIR` | no | `local` file storage in `./data/uploads` (default) or `s3` |
+| `S3_ENDPOINT` / `S3_BUCKET` / `S3_REGION` | with `s3` | Any S3-compatible service, e.g. `https://fsn1.your-objectstorage.com` (Hetzner), a private bucket and its region |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | with `s3` | Access key for the bucket |
+| `S3_FORCE_PATH_STYLE` / `S3_PREFIX` | no | `true` for MinIO-style URLs; key prefix such as `media/` (one bucket or prefix per environment) |
 | `MOCK_AI_LATENCY_MS` | no | Simulated AI response time for the mock provider |
 
 </details>
@@ -161,7 +164,7 @@ flowchart LR
     App --> DB
     AI -. "Claude<br/>or mock" .-> Model["AI model"]
     Billing -. "Stripe<br/>or simulated" .-> Pay["Payments"]
-    Media --> Files[("File storage<br/>local · S3 planned")]
+    Media --> Files[("File storage<br/>local disk · S3")]
 ```
 
 Key design decisions:
@@ -193,7 +196,7 @@ src/
 ├── lib/
 │   ├── ai/              provider interface, Claude and mock providers, patch operations, pricing
 │   ├── billing/         price catalog, credit ledger, purchases, hosting
-│   └── media/           image validation, processing, storage
+│   └── media/           image validation, processing, storage (local/S3), cleanup
 └── proxy.ts             multi-tenant subdomain routing
 drizzle/                 SQL migrations
 tests/                   automated tests
@@ -210,7 +213,7 @@ tests/                   automated tests
 - [x] Stripe Checkout and webhooks
 - [x] Free AI preview with quotas and abuse protection
 - [x] E-mail verification, password reset and hosting-expiry reminders
-- [ ] S3-compatible media storage and cleanup of unused files
+- [x] S3-compatible media storage and cleanup of unused files
 - [ ] Per-site language setting for customer sites
 - [ ] PostgreSQL row-level security as a second layer of tenant isolation
 - [ ] Docker image and one-click deployment (e.g. Coolify on Hetzner)

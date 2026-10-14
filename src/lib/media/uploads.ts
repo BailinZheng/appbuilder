@@ -41,7 +41,7 @@ export async function saveImageUpload(input: { userId: string; appId: string; fi
 
   const id = nanoid(24);
   const storageKey = `${id}.${processed.extension}`;
-  await getMediaStorage().put(storageKey, processed.data);
+  await getMediaStorage().put(storageKey, processed.data, processed.contentType);
   try {
     await db.insert(schema.media).values({
       id,

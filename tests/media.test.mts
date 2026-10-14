@@ -10,6 +10,7 @@ const testUrl = process.env.TEST_DATABASE_URL;
 if (!testUrl) throw new Error("TEST_DATABASE_URL is not set (see .env.example)");
 process.env.DATABASE_URL = testUrl;
 const mediaDir = await mkdtemp(path.join(tmpdir(), "appbuilder-media-"));
+process.env.MEDIA_STORAGE = "local";
 process.env.MEDIA_DIR = mediaDir;
 process.env.MOCK_AI_LATENCY_MS = "0";
 

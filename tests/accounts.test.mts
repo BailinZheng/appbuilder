@@ -16,6 +16,10 @@ process.env.BETTER_AUTH_SECRET ??= "test-secret-for-better-auth-0123456789";
 process.env.MAIL_PROVIDER = "log";
 const outbox = await mkdtemp(path.join(tmpdir(), "appbuilder-outbox-"));
 process.env.MAIL_OUTBOX_DIR = outbox;
+// The daily job also cleans up media: never let it touch the development uploads.
+const mediaDir = await mkdtemp(path.join(tmpdir(), "appbuilder-media-"));
+process.env.MEDIA_STORAGE = "local";
+process.env.MEDIA_DIR = mediaDir;
 process.env.CRON_SECRET = "test-cron-secret";
 
 const { db, schema } = await import("@/db");
@@ -45,6 +49,7 @@ beforeEach(async () => {
 after(async () => {
   await db.$client.end();
   await rm(outbox, { recursive: true, force: true });
+  await rm(mediaDir, { recursive: true, force: true });
 });
 
 /** A request to Better Auth's handler, as the browser would send it (own IP per request: no rate limit clash). */
@@ -248,6 +253,9 @@ describe("daily job endpoint", () => {
     assert.equal((await cron(req("Bearer wrong"))).status, 401);
     const ok = await cron(req("Bearer test-cron-secret"));
     assert.equal(ok.status, 200);
-    assert.deepEqual(await ok.json(), { reminders: { sent: 0, failed: 0 } });
+    assert.deepEqual(await ok.json(), {
+      reminders: { sent: 0, failed: 0 },
+      media: { unusedDeleted: 0, orphanedFilesDeleted: 0, failed: 0 },
+    });
   });
 });

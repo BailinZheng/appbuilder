@@ -10,6 +10,7 @@ import { auth, requireUser } from "@/lib/auth";
 import { headers } from "next/headers";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { canPublish } from "@/lib/billing/hosting";
+import { deleteAppMediaFiles } from "@/lib/media/cleanup";
 import { getLocale, getT } from "@/i18n/server";
 import {
   appDefinitionSchema,
@@ -95,7 +96,12 @@ export async function setPublished(appId: string, published: boolean) {
 
 export async function deleteApp(appId: string) {
   const user = await requireUser();
-  await db.delete(schema.apps).where(own(user.id, appId)); // submissions cascade
+  const files = await db
+    .select({ storageKey: schema.media.storageKey })
+    .from(schema.media)
+    .where(and(eq(schema.media.appId, appId), eq(schema.media.ownerId, user.id)));
+  await db.delete(schema.apps).where(own(user.id, appId)); // submissions, versions and media rows cascade
+  await deleteAppMediaFiles(files.map((f) => f.storageKey)); // leftovers are removed by the daily cleanup
   redirect("/dashboard");
 }
 

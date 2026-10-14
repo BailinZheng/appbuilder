@@ -151,15 +151,6 @@ src/lib/ai/
 - **Effort.** Generation runs at `medium`, edits at `low`, which keeps a free-form instruction well inside its
   credit range. Each API attempt times out after 3 minutes (2 retries), below the 15-minute credit hold.
 
-
-### Replacing the stand-ins
-
-| Stand-in | Replace with | What to implement |
-|---|---|---|
-| `MEDIA_STORAGE=local` | `s3` | `MediaStorage` for S3-compatible object storage (e.g. an EU region) |
-
-Ledger, prices, server actions, UI and tests stay unchanged.
-
 ## Image uploads
 
 ```
@@ -168,13 +159,47 @@ GET  /media/<id>.webp  public, cached as immutable (IDs are unguessable); served
 src/lib/media/
   limits.ts     5 MB per file, 2000 px longest side, 100 images per app, accepted types
   images.ts     type detection from file bytes (JPEG/PNG/WebP/GIF, never SVG); sharp pipeline
-  storage.ts    MediaStorage interface; local disk in MEDIA_DIR (default ./data/uploads, git-ignored)
+  storage.ts    MediaStorage interface (put/get/delete/list); local disk in MEDIA_DIR (default ./data/uploads,
+                git-ignored) or S3
+  s3.ts         S3-compatible client: PUT/GET/DELETE/ListObjectsV2 with AWS Signature V4, no SDK
   uploads.ts    saveImageUpload(): validation → processing → storage → database row
+  cleanup.ts    cleanupMedia(): unused uploads and orphaned files (daily job)
 ```
 
 Every upload is auto-rotated, scaled down to at most 2000 px and re-encoded as WebP. Re-encoding removes all
 metadata, including GPS coordinates that phone photos often contain. The editor's `ImageDropzone` supports
 drag & drop, click, keyboard and paste, with progress, preview and localised errors.
+
+### Object storage (`MEDIA_STORAGE=s3`)
+
+Works with any S3-compatible service – for GDPR, preferably one in the EU such as Hetzner Object Storage
+(`S3_ENDPOINT=https://fsn1.your-objectstorage.com`, `S3_REGION=fsn1`). Settings: `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+`S3_SECRET_ACCESS_KEY`, optionally `S3_PREFIX` (e.g. `media/`) and `S3_FORCE_PATH_STYLE=true` (MinIO).
+
+- **Private bucket.** Images are still delivered through `/media/<id>.<ext>`, which checks the database row and
+  sets the security headers. The bucket needs no public access and no CORS rules.
+- **No SDK.** Four request types do not justify a large dependency. Requests are signed with AWS Signature V4
+  (signed payloads); the signing code is tested against AWS's published examples, and every request in the
+  storage tests goes through a local fake S3 server that recomputes the signature.
+- **Robustness.** 30-second timeout per request; network errors, `5xx` and `429` are retried twice with backoff
+  (all operations are idempotent). Errors report the S3 error code, never the credentials.
+- **Moving from local disk:** copy `MEDIA_DIR` into the bucket (keeping the file names, under `S3_PREFIX`), then
+  switch `MEDIA_STORAGE`. The database stores only keys, so nothing else changes.
+
+### Cleanup of unused files
+
+Part of the daily job (`cleanupMedia()`):
+
+1. **Unused uploads.** An image is in use while its URL (`/media/<id>.<ext>`, relative or absolute) appears in any
+   app – including other apps – or in any undo snapshot (`app_versions`). Unused images older than 7 days are
+   deleted (the grace period covers an open editor whose changes are not saved yet), which also frees room under
+   the per-app image limit. Images of apps that were saved while the job ran are left for the next run.
+2. **Orphaned files.** Stored files without a database row, older than 24 hours – left behind when an upload failed
+   halfway or an account was deleted (rows cascade, files do not). Deleting an app removes its files right away.
+
+Rows are deleted before files, so a failure can only leave a file without a row, which the next run removes.
+Because the cleanup deletes every file its database does not know, **each environment needs its own folder,
+bucket or `S3_PREFIX`** – never point development and production at the same storage.
 
 ## Internationalisation
 
@@ -192,7 +217,7 @@ src/lib/auth.ts            Better Auth: e-mail confirmation required, password r
 src/lib/mail/mailer.ts     sendMail(): MAIL_PROVIDER=log (outbox, /dev/mail) | smtp (SMTP_URL, MAIL_FROM)
 src/lib/mail/templates.ts  German/English mails (plain text + simple HTML, all values escaped)
 src/lib/billing/reminders.ts  hosting-expiry reminders
-src/lib/jobs/daily.ts      runDailyJobs(): expired credits, stale holds, reminders
+src/lib/jobs/daily.ts      runDailyJobs(): expired credits, stale holds, reminders, media cleanup
 ```
 
 - **E-mail confirmation.** Signing up sends a confirmation link (valid 24 h); there is no session until it is opened.
@@ -207,7 +232,8 @@ src/lib/jobs/daily.ts      runDailyJobs(): expired credits, stale holds, reminde
   stage once per hosting period (unique index on app, stage and `hosted_until`) – a renewal starts a new cycle.
   If sending fails, the reminder is retried on the next run.
 - **Daily job.** `npm run jobs:daily` (e.g. a scheduled task in Coolify) or `POST /api/cron/daily` with
-  `Authorization: Bearer $CRON_SECRET`. Safe to run more than once a day.
+  `Authorization: Bearer $CRON_SECRET`. Safe to run more than once a day. It also runs the media cleanup
+  ([Cleanup of unused files](#cleanup-of-unused-files)).
 
 ## Developer tools
 
@@ -230,7 +256,9 @@ npm test
 Tests run with the Node.js test runner against `TEST_DATABASE_URL` (never the development database) and cover:
 parallel reservations, expiry order, stale holds, refunds on failed AI calls and failed saves, idempotent purchases,
 hosting states, patch safety (unsafe links, immutable ids), upload validation and metadata stripping, storage path
-safety, reference-URL validation, and the Claude provider against a scripted fake API (strict schemas, the
+safety, S3 request signing (AWS test vectors) and the S3 client against a fake server (pagination, retries,
+wrong keys), the media cleanup (references in apps, snapshots and other sites; grace periods; orphaned files of
+deleted accounts), reference-URL validation, and the Claude provider against a scripted fake API (strict schemas, the
 patch tool loop with error feedback, web fetch limits, `pause_turn`, refusals, usage and fallback pricing), Stripe
 Checkout and signed webhooks (replays, amount/currency mismatches, delayed payments, expiry, return page), free
 preview quotas (parallel claims, per-network, global and budget limits, IP hash retention), the sign-up, confirmation
@@ -245,8 +273,9 @@ and password-reset flows through Better Auth, hosting reminders and the daily-jo
 - [ ] Wildcard DNS `*.your-domain` and a wildcard TLS certificate
 - [ ] Automated, encrypted, off-site backups of the database and media storage
 - [ ] PostgreSQL row-level security
-- [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, `PAYMENT_PROVIDER=stripe` with live keys, real `MEDIA_STORAGE`
+- [ ] `ENABLE_DEV_TOOLS` off; `AI_PROVIDER=anthropic`, `PAYMENT_PROVIDER=stripe` with live keys, `MEDIA_STORAGE=s3` with a private EU bucket (or a backed-up volume for `local`)
 - [ ] Stripe: webhook endpoint registered (events above), payment methods, business details; decide on VAT/Stripe Tax and invoices; refund handling
 - [ ] `TRUST_PROXY_HOPS` matches the proxy setup, so per-network free-preview limits see the real client IP
 - [ ] Stripe, Anthropic and the mail provider as processors in the privacy policy and DPA list
-- [ ] `npm run jobs:daily` scheduled once a day (or `CRON_SECRET` + an external scheduler); cleanup of unused media files
+- [ ] `npm run jobs:daily` scheduled once a day (or `CRON_SECRET` + an external scheduler)
+- [ ] Separate media storage (bucket or `S3_PREFIX`) per environment – the cleanup deletes files its database does not know
